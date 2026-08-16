@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>fsm_lidar_odometry</name>
+  <version>1.0.0</version>
+  <description>Lidar odometry from a single panoramic 2D lidar, by correspondenceless scan matching in the frequency domain.</description>
+  <maintainer email="alexandros.filotheou@gmail.com">Alexandros Filotheou</maintainer>
+  <author email="alexandros.filotheou@gmail.com">Alexandros Filotheou</author>
+  <license file="LICENSE">MIT</license>
+
+  <url type="repository">https://github.com/fourier-scan-matcher/fsm-lidar-odometry</url>
+  <url type="bugtracker">https://github.com/fourier-scan-matcher/fsm-lidar-odometry/issues</url>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>tf2_geometry_msgs</depend>
+  <depend>eigen</depend>
+  <depend>cgal</depend>
+  <depend>libfftw3</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>launch_testing_ament_cmake</test_depend>
+  <test_depend>launch_testing_ros</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+
+  <!-- FFTW3 and CGAL have no ament wrapper. CMake locates them directly, and
+       rosdep installs them from the cgal and libfftw3 keys declared above. -->
+</package>

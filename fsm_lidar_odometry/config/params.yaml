@@ -1,0 +1,88 @@
+#______________________________________________________________________________
+/fsm_lidar_odometry:
+  ros__parameters:
+
+    # --------------------------------------------------------------------------
+    # IO topics
+    # --------------------------------------------------------------------------
+    # 2d panoramic scans are read here
+    scan_topic: "/base_scan"
+
+    # optional; where an initial pose estimate may be provided. Otherwise the
+    # trajectory starts at (0,0,0)
+    initial_pose_topic: "/amcl_pose"
+
+    pose_estimate_topic: "fsm_lidar_odometry/pose_estimate"
+    path_estimate_topic: "fsm_lidar_odometry/path_estimate"
+    lo_topic:            "fsm_lidar_odometry/lo"
+
+    # --------------------------------------------------------------------------
+    # Frames
+    # --------------------------------------------------------------------------
+    # The node publishes the transform between consecutive laser frames, from
+    # base_frame_id to lo_frame_id, and the current pose estimate with respect
+    # to global_frame_id.
+    global_frame_id: "map"
+    base_frame_id:   "base_laser_link"
+    lo_frame_id:     "lo"
+
+    # --------------------------------------------------------------------------
+    # Matcher
+    # --------------------------------------------------------------------------
+    # How many rays a scan is matched at.
+    #
+    # 0 matches every ray the scan carries: the sensor's own resolution, with
+    # nothing discarded. The first scan to arrive settles the size for the
+    # session, since two scans can only be matched against each other at one
+    # size, and a later scan of a different length is resampled to it.
+    #
+    # Any other value reduces every scan to that many rays before matching, and
+    # refuses a scan carrying fewer. Execution time rises faster than the ray
+    # count does, so this is the setting to reach for when a match takes longer
+    # than the sensor takes to produce the next scan. The node says so when
+    # that happens.
+    size_scan: 0
+
+    # Base angular oversampling, and the maximum it may reach. Larger values buy
+    # accuracy with execution time.
+    min_magnification_size: 0
+    max_magnification_size: 3
+
+    # Greater sensor velocity requires higher values
+    num_iterations: 2
+
+    # Axis-wise and angular radii for generating a new initial estimate when a
+    # match goes badly and a recovery is attempted
+    xy_bound: 0.2
+    t_bound:  0.785398163397448
+
+    # Lower values decrease execution time
+    max_counter:    200
+    max_recoveries: 10
+
+    # 0 draws the recovery search from hardware entropy, as this algorithm has
+    # always done. Any other value pins it so that a run can be reproduced.
+    rng_seed: 0
+
+    # How each ray of a scan is matched to the wall it meets.
+    #
+    # "angular" offers each wall only to the rays that can reach it. It returns
+    # the nearest wall in front of every ray whatever shape the room is, and
+    # its execution time rises in step with size_scan.
+    #
+    # "windowed" narrows the search for each ray to the neighbourhood of the
+    # wall the previous ray met. It is what this algorithm shipped with, and it
+    # is kept so that a run can be compared against results published before
+    # "angular" existed. Its execution time rises with the square of size_scan,
+    # and where a room turns back on itself it can return a wall standing
+    # behind the nearest one.
+    ray_search: "angular"
+
+    # --------------------------------------------------------------------------
+    # Node behaviour
+    # --------------------------------------------------------------------------
+    # "reliable" mirrors what ROS 1 did. Sensor drivers commonly publish
+    # "best_effort", and a subscription that does not match its publisher
+    # receives nothing at all.
+    scan_qos_reliability: "reliable"
+    scan_qos_depth:       1

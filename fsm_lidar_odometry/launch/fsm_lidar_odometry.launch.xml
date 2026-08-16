@@ -1,0 +1,16 @@
+<launch>
+  <let name="pkg_name"  value="fsm_lidar_odometry"/>
+  <arg name="namespace" default="/"/>
+  <arg name="node_name" default="fsm_lidar_odometry"/>
+  <arg name="params"    default="$(find-pkg-share fsm_lidar_odometry)/config/params.yaml"/>
+  <!-- ===================================================================== -->
+  <node pkg="$(var pkg_name)"
+        exec="$(var pkg_name)_interface_node"
+        name="$(var node_name)"
+        namespace="$(var namespace)"
+        output="screen"
+  >
+    <param from="$(var params)"/>
+  </node>
+  <!-- ===================================================================== -->
+</launch>
