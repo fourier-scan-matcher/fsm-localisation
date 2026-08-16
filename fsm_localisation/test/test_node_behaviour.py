@@ -34,7 +34,7 @@ test, which gets a node of its own.
 import time
 import unittest
 
-from fsm_lidar_odometry_test_support import (
+from fsm_localisation_test_support import (
     build_scan,
     FIRST_STAMP,
     FOURTH_STAMP,
@@ -56,14 +56,14 @@ from rclpy.qos import ReliabilityPolicy
 @pytest.mark.launch_test
 def generate_test_description():
     node = launch_ros.actions.Node(
-        package='fsm_lidar_odometry',
-        executable='fsm_lidar_odometry_interface_node',
-        name='fsm_lidar_odometry',
+        package='fsm_localisation',
+        executable='fsm_localisation_interface_node',
+        name='fsm_localisation',
         output='screen',
     )
     return (
         launch.LaunchDescription([node, launch_testing.actions.ReadyToTest()]),
-        {'fsm_lidar_odometry': node},
+        {'fsm_localisation': node},
     )
 
 
@@ -214,7 +214,7 @@ class TestNodeBehaviour(unittest.TestCase):
         }
 
         client = self.harness.create_client(
-            GetParameters, '/fsm_lidar_odometry/get_parameters')
+            GetParameters, '/fsm_localisation/get_parameters')
         self.assertTrue(client.wait_for_service(timeout_sec=SERVICE_TIMEOUT))
 
         request = GetParameters.Request()

@@ -1,8 +1,8 @@
 <launch>
-  <let name="pkg_name"  value="fsm_lidar_odometry"/>
+  <let name="pkg_name"  value="fsm_localisation"/>
   <arg name="namespace" default="/"/>
-  <arg name="node_name" default="fsm_lidar_odometry"/>
-  <arg name="params"    default="$(find-pkg-share fsm_lidar_odometry)/config/params.yaml"/>
+  <arg name="node_name" default="fsm_localisation"/>
+  <arg name="params"    default="$(find-pkg-share fsm_localisation)/config/params.yaml"/>
   <!-- ===================================================================== -->
   <node pkg="$(var pkg_name)"
         exec="$(var pkg_name)_interface_node"

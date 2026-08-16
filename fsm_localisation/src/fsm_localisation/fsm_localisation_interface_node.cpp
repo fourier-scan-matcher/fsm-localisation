@@ -22,13 +22,13 @@
  * @brief Instantiates the interface class to be used for triggering the
  *        functionality the node provides
  */
-#include "fsm_lidar_odometry/fsm_lidar_odometry_interface.hpp"
+#include "fsm_localisation/fsm_localisation_interface.hpp"
 
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
   rclcpp::executors::MultiThreadedExecutor exec;
-  auto node = std::make_shared<fsm_lidar_odometry::Interface>();
+  auto node = std::make_shared<fsm_localisation::Interface>();
   exec.add_node(node);
   exec.spin();
   rclcpp::shutdown();

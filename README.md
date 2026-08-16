@@ -5,7 +5,7 @@
 [![ieeexplore.ieee.org](https://img.shields.io/badge/IEEE/RSJ_IROS_2022_paper-00629B)](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=9981228)
 [![youtube.com](https://img.shields.io/badge/1'_presentation-YouTube-FF0000)](https://www.youtube.com/watch?v=hB4qsHCEXGI)
 [![github.com](https://img.shields.io/badge/pdf_presentation-333333)](https://mozilla.github.io/pdf.js/web/viewer.html?file=https://raw.githubusercontent.com/phd-li9i/fsm_presentation_iros22/master/main.pdf)
-[![hub.docker.com](https://img.shields.io/docker/pulls/li9i/fsm-lidar-odometry?logo=docker&label=docker%20pulls)](https://hub.docker.com/r/li9i/fsm-lidar-odometry)
+[![hub.docker.com](https://img.shields.io/docker/pulls/li9i/fsm-localisation?logo=docker&label=docker%20pulls)](https://hub.docker.com/r/li9i/fsm-localisation)
 
 </div>
 
@@ -17,7 +17,7 @@
     <a href="#run">run</a>
 </h3>
 
-`fsm_lidar_odometry` is a ROS 2 package written in C++ that provides LIDAR odometry from measurements of a single panoramic 2D LIDAR sensor, that is: a sensor whose field of view is 360 degrees. `fsm_lidar_odometry` is the ROS wrapper of [`fsm`](https://github.com/li9i/fsm).
+`fsm_localisation` is a ROS 2 package written in C++ that provides LIDAR odometry from measurements of a single panoramic 2D LIDAR sensor, that is: a sensor whose field of view is 360 degrees. `fsm_localisation` is the ROS wrapper of [`fsm`](https://github.com/li9i/fsm).
 
 <p align="center">
   <img src="https://i.imgur.com/hUsBImy.png">
@@ -41,7 +41,7 @@ Table of Contents
   * [Launch](#launch)
   * [Call](#call)
 * [Nodes](#nodes)
-  * [`fsm_lidar_odometry`](#fsm_lidar_odometry)
+  * [`fsm_localisation`](#fsm_localisation)
     * [Subscribed topics](#subscribed-topics)
     * [Published topics](#published-topics)
     * [Services offered](#services-offered)
@@ -65,7 +65,7 @@ Three ways, in increasing order of effort. The ROS 2 sources are on the `lyrical
 ### From apt
 
 ```bash
-sudo apt install ros-lyrical-fsm-lidar-odometry
+sudo apt install ros-lyrical-fsm-localisation
 ```
 
 ### From Docker Hub
@@ -73,7 +73,7 @@ sudo apt install ros-lyrical-fsm-lidar-odometry
 The image carries ROS 2 Lyrical and every dependency, so the host needs nothing but Docker. It is a runtime image: it holds what the node needs to run and no visualisation or simulation tools, which keeps it a little over two gigabytes.
 
 ```bash
-docker pull li9i/fsm-lidar-odometry:lyrical
+docker pull li9i/fsm-localisation:lyrical
 ```
 
 `latest` points at the same image. The ROS 1 version stays where it always was, at `li9i/fsm-lo:latest`, and is not updated any more.
@@ -81,8 +81,8 @@ docker pull li9i/fsm-lidar-odometry:lyrical
 To build the image yourself instead of pulling it:
 
 ```bash
-git clone https://github.com/fourier-scan-matcher/fsm-lidar-odometry.git
-cd fsm-lidar-odometry
+git clone https://github.com/fourier-scan-matcher/fsm-localisation.git
+cd fsm-localisation
 docker compose -f docker/docker-compose.yml build
 ```
 
@@ -91,10 +91,10 @@ docker compose -f docker/docker-compose.yml build
 ```bash
 mkdir -p ~/ros2_ws/src
 cd ~/ros2_ws/src
-git clone https://github.com/fourier-scan-matcher/fsm-lidar-odometry.git
+git clone https://github.com/fourier-scan-matcher/fsm-localisation.git
 cd ~/ros2_ws
 rosdep install --from-paths src --ignore-src -r -y
-colcon build --packages-select fsm_lidar_odometry
+colcon build --packages-select fsm_localisation
 ```
 
 ## Run
@@ -105,14 +105,14 @@ Installed from apt:
 
 ```bash
 source /opt/ros/lyrical/setup.bash
-ros2 launch fsm_lidar_odometry fsm_lidar_odometry.launch.xml
+ros2 launch fsm_localisation fsm_localisation.launch.xml
 ```
 
 Built from source:
 
 ```bash
 source ~/ros2_ws/install/setup.bash
-ros2 launch fsm_lidar_odometry fsm_lidar_odometry.launch.xml
+ros2 launch fsm_localisation fsm_localisation.launch.xml
 ```
 
 With Docker:
@@ -123,17 +123,17 @@ docker compose -f docker/docker-compose.yml up
 
 ### Call
 
-Launching `fsm_lidar_odometry` puts it into stand-by; it processes nothing until told to. To start:
+Launching `fsm_localisation` puts it into stand-by; it processes nothing until told to. To start:
 
 ```bash
-ros2 service call /fsm_lidar_odometry/start std_srvs/srv/Trigger
+ros2 service call /fsm_localisation/start std_srvs/srv/Trigger
 ```
 
 ## Nodes
 
-### `fsm_lidar_odometry`
+### `fsm_localisation`
 
-The executable is `fsm_lidar_odometry_interface_node`. It runs on a multi-threaded executor, so a service call cannot be held up behind a scan being matched.
+The executable is `fsm_localisation_interface_node`. It runs on a multi-threaded executor, so a service call cannot be held up behind a scan being matched.
 
 #### Subscribed topics
 
@@ -156,12 +156,12 @@ Every message is stamped with the timestamp of the scan that produced it, not wi
 
 All four take `std_srvs/srv/Trigger` and return a success flag and a message.
 
-| Service                                         | Utility                                                                                                                        |
-| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `fsm_lidar_odometry/clear_estimated_trajectory` | clears the vector of estimated poses and returns the accumulated pose to the origin                                            |
-| `fsm_lidar_odometry/set_initial_pose`           | node waits for one message on `initial_pose_topic`, sets fsm's initial pose from it, and returns. Waits for as long as it takes |
-| `fsm_lidar_odometry/start`                      | commences node functionality                                                                                                   |
-| `fsm_lidar_odometry/stop`                       | halts node functionality (node remains alive)                                                                                  |
+| Service                                       | Utility                                                                                                                        |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `fsm_localisation/clear_estimated_trajectory` | clears the vector of estimated poses and returns the accumulated pose to the origin                                            |
+| `fsm_localisation/set_initial_pose`           | node waits for one message on `initial_pose_topic`, sets fsm's initial pose from it, and returns. Waits for as long as it takes |
+| `fsm_localisation/start`                      | commences node functionality                                                                                                   |
+| `fsm_localisation/stop`                       | halts node functionality (node remains alive)                                                                                  |
 
 #### Parameters
 
@@ -171,9 +171,9 @@ Found in `config/params.yaml`:
 | --------------------- | -------------------------------------------------------------------- |
 | `scan_topic`          | 2d panoramic scans are published here                                |
 | `initial_pose_topic`  | (optional) the topic where an initial pose estimate may be provided  |
-| `pose_estimate_topic` | `fsm_lidar_odometry`'s pose estimates are published here             |
-| `path_estimate_topic` | `fsm_lidar_odometry`'s total trajectory estimate is published here   |
-| `lo_topic`            | `fsm_lidar_odometry`'s odometry estimate is published here           |
+| `pose_estimate_topic` | `fsm_localisation`'s pose estimates are published here               |
+| `path_estimate_topic` | `fsm_localisation`'s total trajectory estimate is published here     |
+| `lo_topic`            | `fsm_localisation`'s odometry estimate is published here             |
 
 | Frame ids         | Description                                                    |
 | ----------------- | -------------------------------------------------------------- |
@@ -235,16 +235,16 @@ A parameter outside its permitted range is refused at start-up with an explanati
 lo_frame_id <- base_frame_id
 ```
 
-in other words `fsm_lidar_odometry` publishes the transform from `base_laser_link` (or equivalent) to the equivalent of `/odom` (in this case `lo_frame_id`).
+in other words `fsm_localisation` publishes the transform from `base_laser_link` (or equivalent) to the equivalent of `/odom` (in this case `lo_frame_id`).
 
 #### Diagnostics
 
-The matching core reports in plain strings and does not write to a terminal itself. It hands each line to whatever destination the host installed, through `fsm_lidar_odometry::setDiagnosticSink`, and drops the line where nothing was installed. The node installs a destination that forwards to `RCLCPP_INFO`, so anything the core says arrives in the ordinary ROS log.
+The matching core reports in plain strings and does not write to a terminal itself. It hands each line to whatever destination the host installed, through `fsm_localisation::setDiagnosticSink`, and drops the line where nothing was installed. The node installs a destination that forwards to `RCLCPP_INFO`, so anything the core says arrives in the ordinary ROS log.
 
-In an ordinary build there is almost nothing to say. The stage timings, which are the bulk of it, are compiled out unless the core is built with `FSM_LIDAR_ODOMETRY_TRACE`:
+In an ordinary build there is almost nothing to say. The stage timings, which are the bulk of it, are compiled out unless the core is built with `FSM_LOCALISATION_TRACE`:
 
 ```sh
-colcon build --cmake-args "-DCMAKE_CXX_FLAGS=-DFSM_LIDAR_ODOMETRY_TRACE"
+colcon build --cmake-args "-DCMAKE_CXX_FLAGS=-DFSM_LOCALISATION_TRACE"
 ```
 
 That build is for finding out where the time goes and is not the one to run a robot with: it reads the clock around every stage of every iteration.
@@ -257,7 +257,7 @@ It is also faster. Driven over the same synthetic scans on the same machine, com
 
 What did change:
 
-- The package is called `fsm_lidar_odometry`. It was `fsm_lo`. Everything named after it followed: the node, the launch file, the default node name, and the four service names, which are now `fsm_lidar_odometry/start` and so on. The topic and parameter names are untouched.
+- The package is called `fsm_localisation`. It was `fsm_lo`. Everything named after it followed: the node, the launch file, the default node name, and the four service names, which are now `fsm_localisation/start` and so on. The topic and parameter names are untouched.
 - The four services return `std_srvs/srv/Trigger` instead of taking and returning nothing, so callers now get a success flag and a message.
 - Output is stamped from the incoming scan rather than from the clock at the moment of processing. The reported twist follows from the interval between scan stamps, so it no longer varies with machine load.
 - `std_msgs/Header` has no sequence number in ROS 2, so the published messages no longer carry one.

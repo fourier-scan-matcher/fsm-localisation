@@ -22,5 +22,5 @@
 Marks this directory as the root of the node level tests.
 
 Its presence is what puts the directory on the import path, so the test files
-can share fsm_lidar_odometry_test_support without any of them manipulating sys.path.
+can share fsm_localisation_test_support without any of them manipulating sys.path.
 """

@@ -43,7 +43,7 @@ RUN rm /bin/sh && ln -s /bin/bash /bin/sh
 # ------------------------------------------------------------------------------
 # Create new user and home directory
 # https://roboticseabass.com/2023/07/09/updated-guide-docker-and-ros2/
-ARG USER=fsm_lidar_odometry
+ARG USER=fsm_localisation
 RUN useradd --create-home ${USER}                                           && \
     echo ${USER} ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/${USER}         && \
     chmod 0440 /etc/sudoers.d/${USER}                                       && \
@@ -66,7 +66,7 @@ USER root
 ################################################################################
 RUN rosdep update
 
-COPY --chown=${USER}:${USER} fsm_lidar_odometry/ /home/${USER}/ros2_ws/src/fsm_lidar_odometry/
+COPY --chown=${USER}:${USER} fsm_localisation/ /home/${USER}/ros2_ws/src/fsm_localisation/
 
 # The manifest is the one list of what this package needs. Resolve it rather
 # than repeating it here, so that a dependency added to the manifest cannot be
@@ -90,8 +90,8 @@ RUN source /opt/ros/lyrical/setup.bash                                      && \
     cd /home/${USER}/ros2_ws                                                && \
     colcon build                                                               \
       --cmake-args                                                             \
-        -DFSM_LIDAR_ODOMETRY_EXACT_FP=${EXACT_FP}                                          \
-        -DFSM_LIDAR_ODOMETRY_DETERMINISTIC_FFT=${DETERMINISTIC_FFT}
+        -DFSM_LOCALISATION_EXACT_FP=${EXACT_FP}                                \
+        -DFSM_LOCALISATION_DETERMINISTIC_FFT=${DETERMINISTIC_FFT}
 
 # Restore default user
 USER root

@@ -46,7 +46,7 @@
 #include <string>
 #include <vector>
 
-#include "fsm_lidar_odometry/fsm_lidar_odometry.hpp"
+#include "fsm_localisation/fsm_localisation.hpp"
 
 namespace
 {
@@ -58,7 +58,7 @@ const double kStep = 2 * M_PI / kSize;
 
 std::string fixture(const std::string& name)
 {
-  return std::string(FSM_LIDAR_ODOMETRY_TEST_FIXTURES) + "/" + name;
+  return std::string(FSM_LOCALISATION_TEST_FIXTURES) + "/" + name;
 }
 
 std::vector<std::vector<double>> readScans(const std::string& name)
@@ -360,13 +360,13 @@ TEST(Diagnostics, TheCoreReportsThroughWhateverTheHostInstalls)
     FSM::RaySearch::angular);
 
   std::vector<std::string> reported;
-  fsm_lidar_odometry::setDiagnosticSink(
+  fsm_localisation::setDiagnosticSink(
     [&reported](const std::string& message) { reported.push_back(message); });
 
   FSM::Rotation::fmt(scans[1], FSM::Pose{}, map, 0, "spiral", forward, inverse,
     FSM::RaySearch::angular);
 
-  fsm_lidar_odometry::setDiagnosticSink(nullptr);
+  fsm_localisation::setDiagnosticSink(nullptr);
 
   ASSERT_EQ(reported.size(), 1u);
   EXPECT_NE(reported[0].find("batch"), std::string::npos) << reported[0];

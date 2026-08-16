@@ -1,14 +1,14 @@
 <?xml version="1.0"?>
 <package format="3">
-  <name>fsm_lidar_odometry</name>
+  <name>fsm_localisation</name>
   <version>1.0.0</version>
   <description>Lidar odometry from a single panoramic 2D lidar, by correspondenceless scan matching in the frequency domain.</description>
   <maintainer email="alexandros.filotheou@gmail.com">Alexandros Filotheou</maintainer>
   <author email="alexandros.filotheou@gmail.com">Alexandros Filotheou</author>
   <license file="LICENSE">MIT</license>
 
-  <url type="repository">https://github.com/fourier-scan-matcher/fsm-lidar-odometry</url>
-  <url type="bugtracker">https://github.com/fourier-scan-matcher/fsm-lidar-odometry/issues</url>
+  <url type="repository">https://github.com/fourier-scan-matcher/fsm-localisation</url>
+  <url type="bugtracker">https://github.com/fourier-scan-matcher/fsm-localisation/issues</url>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 

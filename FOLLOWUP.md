@@ -23,7 +23,7 @@ one has a test; the remaining twenty six are compiled into the package and run
 by nothing at all.
 
 They are listed and grouped, with the method used to arrive at the list, in the
-header comment of `fsm_lidar_odometry/test/test_core_golden.cpp`. `tests/reachability/`
+header comment of `fsm_localisation/test/test_core_golden.cpp`. `tests/reachability/`
 holds the probe, so the list can be recomputed whenever a call is added or
 removed.
 
@@ -59,7 +59,7 @@ The function on its own is still unsafe for any other caller.
 
 ## The core header is duplicated in the `fsm` repository
 
-`include/fsm_lidar_odometry/fsm_core.hpp` and `include/fsm.h` in
+`include/fsm_localisation/fsm_core.hpp` and `include/fsm.h` in
 [`fsm`](https://github.com/li9i/fsm) are two copies of the same algorithm that
 have drifted apart. Differences found while porting:
 

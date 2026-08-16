@@ -69,17 +69,17 @@ typedef CGAL::Min_ellipse_2<Traits>           Min_ellipse;
  * FFTW_MEASURE selects a plan by running timing trials, so the plan, and with
  * it the rounding of the transform, can differ between two runs of the same
  * binary on the same machine. FFTW_ESTIMATE selects by heuristic and is
- * therefore repeatable. Define FSM_LIDAR_ODOMETRY_FFTW_ESTIMATE at build time to obtain
+ * therefore repeatable. Define FSM_LOCALISATION_FFTW_ESTIMATE at build time to obtain
  * repeatable output at some cost in speed; the shipped configuration does not.
  */
-#ifdef FSM_LIDAR_ODOMETRY_FFTW_ESTIMATE
-  #define FSM_LIDAR_ODOMETRY_FFTW_PLAN_FLAG FFTW_ESTIMATE
+#ifdef FSM_LOCALISATION_FFTW_ESTIMATE
+  #define FSM_LOCALISATION_FFTW_PLAN_FLAG FFTW_ESTIMATE
 #else
-  #define FSM_LIDAR_ODOMETRY_FFTW_PLAN_FLAG FFTW_MEASURE
+  #define FSM_LOCALISATION_FFTW_PLAN_FLAG FFTW_MEASURE
 #endif
 
 /*
- * Diagnostics. Define FSM_LIDAR_ODOMETRY_TRACE at build time to have the algorithm print
+ * Diagnostics. Define FSM_LOCALISATION_TRACE at build time to have the algorithm print
  * what it is doing and how long each part took, and to have it fill in the
  * timing and iteration fields of its output report. No build defines it.
  *
@@ -320,7 +320,7 @@ struct MatchOutput
  * library making a decision that was never its to make.
  *
  * Most of what passes through here is stage timing, and that is compiled out
- * altogether unless FSM_LIDAR_ODOMETRY_TRACE is defined, because the clock readings around
+ * altogether unless FSM_LOCALISATION_TRACE is defined, because the clock readings around
  * every stage cost more than the printing ever did. What survives into an
  * ordinary build is the handful of complaints the core makes when it cannot
  * write a file or is handed a mode it does not recognise.
@@ -377,7 +377,7 @@ class X
     const std::vector< std::pair<double, double> >& lines,
     const unsigned int& num_rays)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point a =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -511,7 +511,7 @@ class X
         std::make_pair(candidate_points[idx].first, candidate_points[idx].second));
     }
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point b =
       std::chrono::high_resolution_clock::now();
 
@@ -549,7 +549,7 @@ class X
     const std::vector< std::pair<double, double> >& lines,
     const unsigned int& num_rays)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point a =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -670,7 +670,7 @@ class X
         : intersections[i-1];
     }
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point b =
       std::chrono::high_resolution_clock::now();
 
@@ -763,7 +763,7 @@ class X
     const std::vector< std::pair<double, double> >& lines,
     const unsigned int& num_rays)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point a =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -864,7 +864,7 @@ class X
       intersections.push_back(intersection_point);
     }
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point b =
       std::chrono::high_resolution_clock::now();
 
@@ -1012,7 +1012,7 @@ class Utils
   static std::vector< std::pair<double, double> > conjugate(
     const std::vector< std::pair<double, double> >& vec)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point start =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -1021,7 +1021,7 @@ class Utils
     for (std::size_t i = 0; i < vec.size(); i++)
       ret_vector.push_back(std::make_pair(vec[i].first, -vec[i].second));
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point end =
       std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed =
@@ -1048,7 +1048,7 @@ class Utils
     if (inclusion_bound < 0.0001)
       eps = 1.0;
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     Diagnostics::report(std::format("inclusion_bound = {:f}",
       inclusion_bound + eps));
 #endif
@@ -1293,7 +1293,7 @@ class Utils
     const std::vector< std::pair<double, double> >& vec1,
     const std::vector< std::pair<double, double> >& vec2)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point start =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -1312,7 +1312,7 @@ class Utils
       ret_vector.push_back(std::make_pair(re,im));
     }
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point end =
       std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed =
@@ -1453,7 +1453,7 @@ class Utils
     const std::vector< std::pair<double,double> >& points,
     const Pose& pose)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point start =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -1472,7 +1472,7 @@ class Utils
       scan.push_back(sqrt(dx*dx+dy*dy));
     }
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point end =
       std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed =
@@ -1506,7 +1506,7 @@ class Utils
     const Pose pose,
     const double& angle_span = 2*M_PI)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point start =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -1530,7 +1530,7 @@ class Utils
       points.push_back(std::make_pair(x,y));
     }
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point end =
       std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> elapsed =
@@ -2420,7 +2420,7 @@ class DFTUtils
    */
   static std::vector<double> dft(const std::span<const double> rays_diff)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point a =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -2444,7 +2444,7 @@ class DFTUtils
     for (unsigned int i = 0; i < num_rays; i++)
       dft_coeff_vector.push_back(out[i]);
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point b =
       std::chrono::high_resolution_clock::now();
 
@@ -2463,7 +2463,7 @@ class DFTUtils
   static std::vector<double> dft(const std::span<const double> rays_diff,
     const fftw_plan& r2rp)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point a =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -2475,7 +2475,7 @@ class DFTUtils
 
     /*
      * Create plan
-     * fftw_plan p = fftw_plan_r2r_1d(num_rays, in, out, FFTW_R2HC, FSM_LIDAR_ODOMETRY_FFTW_PLAN_FLAG);
+     * fftw_plan p = fftw_plan_r2r_1d(num_rays, in, out, FFTW_R2HC, FSM_LOCALISATION_FFTW_PLAN_FLAG);
      */
 
     /* Transfer the input vector to a structure preferred by fftw */
@@ -2491,7 +2491,7 @@ class DFTUtils
     for (unsigned int i = 0; i < num_rays; i++)
       dft_coeff_vector.push_back(out[i]);
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point b =
       std::chrono::high_resolution_clock::now();
 
@@ -2510,7 +2510,7 @@ class DFTUtils
   static std::vector< std::vector<double> > dftBatch(
     const std::vector< std::vector<double> >& scans)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point a =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -2546,7 +2546,7 @@ class DFTUtils
       coeff_vector_v.push_back(dft_coeffs);
     }
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point b =
       std::chrono::high_resolution_clock::now();
 
@@ -2566,7 +2566,7 @@ class DFTUtils
     const std::vector< std::vector<double> >& scans,
     const fftw_plan& r2rp)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point a =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -2584,7 +2584,7 @@ class DFTUtils
 
     /*
      * Create plan once
-     * fftw_plan p = fftw_plan_r2r_1d(num_rays, in, out, FFTW_R2HC, FSM_LIDAR_ODOMETRY_FFTW_PLAN_FLAG);
+     * fftw_plan p = fftw_plan_r2r_1d(num_rays, in, out, FFTW_R2HC, FSM_LOCALISATION_FFTW_PLAN_FLAG);
      */
 
     for (unsigned int v = 0; v < scans.size(); v++)
@@ -2604,7 +2604,7 @@ class DFTUtils
       coeff_vector_v.push_back(dft_coeffs);
     }
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point b =
       std::chrono::high_resolution_clock::now();
 
@@ -2622,7 +2622,7 @@ class DFTUtils
   */
   static void fftshift(std::vector<double>& vec)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point a =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -2632,7 +2632,7 @@ class DFTUtils
       vec.begin() + static_cast<unsigned int>(vec.size()/2),
       vec.end());
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point b =
       std::chrono::high_resolution_clock::now();
 
@@ -2658,7 +2658,7 @@ class DFTUtils
     const FFTWBuffer<double> in = fftwBuffer<double>(size);
     const FFTWBuffer<double> out = fftwBuffer<double>(size);
     const fftw_plan plan = fftw_plan_r2r_1d(size, in.get(), out.get(),
-      FFTW_R2HC, FSM_LIDAR_ODOMETRY_FFTW_PLAN_FLAG);
+      FFTW_R2HC, FSM_LOCALISATION_FFTW_PLAN_FLAG);
 
     plans.emplace(size, plan);
     return plan;
@@ -2669,7 +2669,7 @@ class DFTUtils
   static std::vector< std::pair<double, double> >
   getDFTCoefficientsPairs(const std::span<const double> coeffs)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point a =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -2694,7 +2694,7 @@ class DFTUtils
         std::make_pair(fft_coeff_pairs_bak[i].first, -fft_coeff_pairs_bak[i].second));
     }
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point b =
       std::chrono::high_resolution_clock::now();
 
@@ -2719,7 +2719,7 @@ class DFTUtils
   static std::vector<double> getFirstDFTCoefficient(
     const std::span<const double> rays_diff)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point a =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -2753,7 +2753,7 @@ class DFTUtils
     else
       dft_coeff_vector.push_back(0.0);
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point b =
       std::chrono::high_resolution_clock::now();
 
@@ -2773,7 +2773,7 @@ class DFTUtils
     const std::span<const double> rays_diff,
     const fftw_plan& r2rp)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point a =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -2807,7 +2807,7 @@ class DFTUtils
     else
       dft_coeff_vector.push_back(0.0);
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point b =
       std::chrono::high_resolution_clock::now();
 
@@ -2826,7 +2826,7 @@ class DFTUtils
   static std::vector<double> idft(
     const std::vector<std::pair<double, double> >& rays_diff)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point a =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -2853,7 +2853,7 @@ class DFTUtils
     for (unsigned int i = 0; i < num_rays; i++)
       dft_coeff_vector.push_back(out[i]/num_rays);
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point b =
       std::chrono::high_resolution_clock::now();
 
@@ -2872,7 +2872,7 @@ class DFTUtils
   static std::vector< std::vector<double> > idftBatch(
     const std::vector< std::vector<std::pair<double, double> > >& scans)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point a =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -2911,7 +2911,7 @@ class DFTUtils
       dft_coeffs_v.push_back(dft_coeffs);
     }
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point b =
       std::chrono::high_resolution_clock::now();
 
@@ -2931,7 +2931,7 @@ class DFTUtils
     const std::vector< std::vector<std::pair<double, double> > >& scans,
     const fftw_plan& c2rp)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point a =
       std::chrono::high_resolution_clock::now();
 #endif
@@ -2948,7 +2948,7 @@ class DFTUtils
 
     /*
      * Create plan once
-     * fftw_plan p = fftw_plan_dft_c2r_1d(num_rays, in, out, FSM_LIDAR_ODOMETRY_FFTW_PLAN_FLAG);
+     * fftw_plan p = fftw_plan_dft_c2r_1d(num_rays, in, out, FSM_LOCALISATION_FFTW_PLAN_FLAG);
      */
 
     for (unsigned int v = 0; v < scans.size(); v++)
@@ -2971,7 +2971,7 @@ class DFTUtils
       dft_coeffs_v.push_back(dft_coeffs);
     }
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     std::chrono::high_resolution_clock::time_point b =
       std::chrono::high_resolution_clock::now();
 
@@ -3001,7 +3001,7 @@ class DFTUtils
     const FFTWBuffer<fftw_complex> in = fftwBuffer<fftw_complex>(size);
     const FFTWBuffer<double> out = fftwBuffer<double>(size);
     const fftw_plan plan =
-      fftw_plan_dft_c2r_1d(size, in.get(), out.get(), FSM_LIDAR_ODOMETRY_FFTW_PLAN_FLAG);
+      fftw_plan_dft_c2r_1d(size, in.get(), out.get(), FSM_LOCALISATION_FFTW_PLAN_FLAG);
 
     plans.emplace(size, plan);
     return plan;
@@ -3026,7 +3026,7 @@ class Translation
     const fftw_plan& r2rp,
     const RaySearch ray_search)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     Diagnostics::report(std::format("input pose  ({:f},{:f},{:f}) [Translation::tff]",
       virtual_pose.x,
       virtual_pose.y,
@@ -3121,7 +3121,7 @@ class Translation
       /* Check constraints */
       if(!Utils::isPositionInMap(current_pose, map))
       {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
         Diagnostics::report("OUT OF BOUNDS");
 #endif
 
@@ -3146,7 +3146,7 @@ class Translation
 
       sum_d_v = std::accumulate(d_v.begin(), d_v.end(), 0.0);
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
       Diagnostics::report(std::format("err = {:f}",
         err));
       Diagnostics::report(std::format("norm_x1 = {:f}",
@@ -3192,7 +3192,7 @@ class Translation
     std::chrono::duration<double> elapsed =
       std::chrono::duration_cast< std::chrono::duration<double> >(end-start);
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     Diagnostics::report(std::format("output pose ({:f},{:f},{:f}) [Translation::tff]",
       output.pose.x,
       output.pose.y,
@@ -3229,7 +3229,7 @@ class Translation
     const double x_e = errors_xy[0];
     const double y_e = errors_xy[1];
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     Diagnostics::report(std::format("(x_e,y_e) = ({:f},{:f})",
       x_e, y_e));
 #endif
@@ -3635,7 +3635,7 @@ public:
     const fftw_plan& r2rp, const fftw_plan& c2rp,
     const RaySearch ray_search)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     Diagnostics::report(std::format("input pose  ({:f},{:f},{:f}) [Rotation::fmt2]",
       virtual_pose.x,
       virtual_pose.y,
@@ -3736,7 +3736,7 @@ public:
       output.rc1.push_back(snrs[optimal_ids[i]] / fahms[optimal_ids[i]]);
     }
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     for (unsigned int i = 0; i < output.angles.size(); i++)
     {
       Diagnostics::report(std::format("cand. poses ({:f},{:f},{:f}) [Rotation::fmt2]",
@@ -3759,7 +3759,7 @@ public:
     const unsigned int& magnification_size,
     const RaySearch ray_search)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     Diagnostics::report(std::format("input pose  ({:f},{:f},{:f}) [Rotation::fmt2]",
       virtual_pose.x,
       virtual_pose.y,
@@ -3834,7 +3834,7 @@ public:
       fahms.push_back(fahm);
       pds.push_back(pd);
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
       Diagnostics::report(std::format("a = {}",
         a));
       Diagnostics::report(std::format("angle to out = {:f}",
@@ -3862,7 +3862,7 @@ public:
       output.rc1.push_back(snrs[optimal_ids[i]] / fahms[optimal_ids[i]]);
     }
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     for (unsigned int i = 0; i < output.angles.size(); i++)
     {
       Diagnostics::report(std::format("cand. poses ({:f},{:f},{:f}) [Rotation::fmt2]",
@@ -3955,7 +3955,7 @@ public:
         std::max_element(criteria.begin(), criteria.end()) - criteria.begin();
       [[maybe_unused]] const double max_c = criteria[max_c_idx];
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
       Diagnostics::report(std::format("best id = {}",
         max_c_idx));
 #endif
@@ -3988,7 +3988,7 @@ public:
         if (k == static_cast<int>(criteria.size()))
           k = 0;
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
         Diagnostics::report(std::format("k = {}",
           k));
 #endif
@@ -4007,7 +4007,7 @@ public:
         it != best_ids_set.end(); it++) best_ids.push_back(*it);
     }
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     Diagnostics::report("BEST IDS = [");
     for (unsigned int i = 0; i < best_ids.size(); i++)
       Diagnostics::report(std::format("{} ",
@@ -4124,7 +4124,7 @@ class Match
 
     while (current_magnification_size <= max_magnification_size)
     {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
       Diagnostics::report(std::format("current_magnification_size = {} ---",
         current_magnification_size));
       Diagnostics::report(std::format("counter                    = {} ---",
@@ -4134,7 +4134,7 @@ class Match
       /*
        * ----------------- Rotation correction phase ---------------------------
        */
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
       std::chrono::high_resolution_clock::time_point start_rotation =
         std::chrono::high_resolution_clock::now();
 #endif
@@ -4149,7 +4149,7 @@ class Match
 
       intersections_time = rotation_output.intersections_time;
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
       std::chrono::high_resolution_clock::time_point end_rotation =
         std::chrono::high_resolution_clock::now();
 
@@ -4185,7 +4185,7 @@ class Match
           Pose cand_pose = *result_pose;
           cand_pose.t += cand_angles[ca];
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
           std::chrono::high_resolution_clock::time_point start_translation =
             std::chrono::high_resolution_clock::now();
 #endif
@@ -4198,7 +4198,7 @@ class Match
           tr_i = translation_output.iterations;
           intersections_time = translation_output.intersections_time;
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
           std::chrono::high_resolution_clock::time_point end_translation =
             std::chrono::high_resolution_clock::now();
 
@@ -4208,7 +4208,7 @@ class Match
           op->intersections_times += intersections_time.count();
 #endif
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
           op->translation_iterations += tr_i;
 #endif
 
@@ -4255,7 +4255,7 @@ class Match
       [[maybe_unused]] int tr_iterations = -1;
       [[maybe_unused]] const double int_time_trans = 0.0;
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
       std::chrono::high_resolution_clock::time_point start_translation =
         std::chrono::high_resolution_clock::now();
 #endif
@@ -4269,7 +4269,7 @@ class Match
       intersections_time = translation_output.intersections_time;
       *result_pose = translation_output.pose;
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
       std::chrono::high_resolution_clock::time_point end_translation =
         std::chrono::high_resolution_clock::now();
 
@@ -4279,13 +4279,13 @@ class Match
       op->intersections_times += intersections_time.count();
 #endif
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
       op->translation_iterations += tr_iterations;
 #endif
 
       tc_v.push_back(trans_criterion);
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
       Diagnostics::report(std::format("rc0 = {:f}",
         rc0_v.back()));
       Diagnostics::report(std::format("rc1 = {:f}",
@@ -4297,7 +4297,7 @@ class Match
       xs.push_back(result_pose->x);
       ys.push_back(result_pose->y);
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
       Pose traj_i;
       traj_i.x = xs.back();
       traj_i.y = ys.back();
@@ -4312,7 +4312,7 @@ class Match
       /* Perilous pose at exterior of map's bounds detected */
       if (tc_v.back() == -2.0)
       {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
         Diagnostics::report("Will trigger recovery due to condition 0");
 #endif
         l2_recovery = true;
@@ -4321,7 +4321,7 @@ class Match
       /* Do not allow more than `max_counter` iterations per resolution */
       if (counter > max_counter)
       {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
         Diagnostics::report("Will trigger recovery due to condition 4");
 #endif
         /* l2_recovery = true; */
@@ -4336,7 +4336,7 @@ class Match
       {
         if (num_recoveries > max_recoveries)
         {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
           Diagnostics::report("ERROR: MAXIMUM RECOVERIES");
 #endif
           break;
@@ -4372,7 +4372,7 @@ class Match
     std::chrono::duration<double> elapsed =
       std::chrono::duration_cast< std::chrono::duration<double> >(end-start);
 
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     Diagnostics::report(std::format("{:f} [Match::fmt]",
       elapsed.count()));
 #endif
@@ -4381,7 +4381,7 @@ class Match
     op->rc = rc0_v.back();
     op->tc = tc_v.back();
     op->num_recoveries = num_recoveries;
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     op->rotation_iterations = total_iterations;
 #endif
 
@@ -4397,7 +4397,7 @@ class Match
     const RaySearch ray_search,
     const unsigned int seed = 0)
   {
-#ifdef FSM_LIDAR_ODOMETRY_TRACE
+#ifdef FSM_LOCALISATION_TRACE
     Diagnostics::report("*********************************");
     Diagnostics::report("************CAUTION**************");
     Diagnostics::report("Level 2 recovery mode activated");

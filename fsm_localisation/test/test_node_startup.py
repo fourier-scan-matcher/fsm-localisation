@@ -29,7 +29,7 @@ file is a single test, so nothing can have disturbed the node before it runs.
 
 import unittest
 
-from fsm_lidar_odometry_test_support import build_scan, FIRST_STAMP, Harness, SECOND_STAMP
+from fsm_localisation_test_support import build_scan, FIRST_STAMP, Harness, SECOND_STAMP
 import launch
 import launch_ros.actions
 import launch_testing
@@ -41,14 +41,14 @@ import rclpy
 @pytest.mark.launch_test
 def generate_test_description():
     node = launch_ros.actions.Node(
-        package='fsm_lidar_odometry',
-        executable='fsm_lidar_odometry_interface_node',
-        name='fsm_lidar_odometry',
+        package='fsm_localisation',
+        executable='fsm_localisation_interface_node',
+        name='fsm_localisation',
         output='screen',
     )
     return (
         launch.LaunchDescription([node, launch_testing.actions.ReadyToTest()]),
-        {'fsm_lidar_odometry': node},
+        {'fsm_localisation': node},
     )
 
 

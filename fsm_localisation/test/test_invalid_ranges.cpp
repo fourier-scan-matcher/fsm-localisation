@@ -35,7 +35,7 @@
 #include <limits>
 #include <vector>
 
-#include "fsm_lidar_odometry/fsm_lidar_odometry.hpp"
+#include "fsm_localisation/fsm_localisation.hpp"
 
 namespace
 {
@@ -67,22 +67,22 @@ std::vector<double> roomScan(const double x, const double y)
   return ranges;
 }
 
-fsm_lidar_odometry::Parameters parameters()
+fsm_localisation::Parameters parameters()
 {
-  fsm_lidar_odometry::Parameters p;
+  fsm_localisation::Parameters p;
   p.size_scan = kSize;
   return p;
 }
 
-fsm_lidar_odometry::Pose matchWith(std::vector<double> second)
+fsm_localisation::Pose matchWith(std::vector<double> second)
 {
-  fsm_lidar_odometry::Matcher matcher(parameters());
+  fsm_localisation::Matcher matcher(parameters());
   const auto first = matcher.process(roomScan(3.0, 2.5));
   EXPECT_FALSE(first.has_value());
 
   const auto result = matcher.process(second);
   EXPECT_TRUE(result.has_value());
-  return result.has_value() ? result->increment : fsm_lidar_odometry::Pose{};
+  return result.has_value() ? result->increment : fsm_localisation::Pose{};
 }
 
 }  // namespace
@@ -100,9 +100,9 @@ TEST(InvalidRanges, ZeroInfinityAndNotANumberAreAllTreatedAsNoReading)
     nans[i] = kNotANumber;
   }
 
-  const fsm_lidar_odometry::Pose from_zeros = matchWith(zeros);
-  const fsm_lidar_odometry::Pose from_infinities = matchWith(infinities);
-  const fsm_lidar_odometry::Pose from_nans = matchWith(nans);
+  const fsm_localisation::Pose from_zeros = matchWith(zeros);
+  const fsm_localisation::Pose from_infinities = matchWith(infinities);
+  const fsm_localisation::Pose from_nans = matchWith(nans);
 
   EXPECT_DOUBLE_EQ(from_infinities.x, from_zeros.x);
   EXPECT_DOUBLE_EQ(from_infinities.y, from_zeros.y);
@@ -120,8 +120,8 @@ TEST(InvalidRanges, AnInfiniteRayDoesNotWreckTheMatch)
   std::vector<double> with_infinity = clean;
   with_infinity[200] = kInfinity;
 
-  const fsm_lidar_odometry::Pose expected = matchWith(clean);
-  const fsm_lidar_odometry::Pose actual = matchWith(with_infinity);
+  const fsm_localisation::Pose expected = matchWith(clean);
+  const fsm_localisation::Pose actual = matchWith(with_infinity);
 
   EXPECT_TRUE(std::isfinite(actual.x));
   EXPECT_TRUE(std::isfinite(actual.y));
@@ -143,8 +143,8 @@ TEST(InvalidRanges, ANegativeRangeIsTreatedAsNoReading)
     negatives[i] = -1.0;
   }
 
-  const fsm_lidar_odometry::Pose from_zeros = matchWith(zeros);
-  const fsm_lidar_odometry::Pose from_negatives = matchWith(negatives);
+  const fsm_localisation::Pose from_zeros = matchWith(zeros);
+  const fsm_localisation::Pose from_negatives = matchWith(negatives);
 
   EXPECT_DOUBLE_EQ(from_negatives.x, from_zeros.x);
   EXPECT_DOUBLE_EQ(from_negatives.y, from_zeros.y);
@@ -152,18 +152,18 @@ TEST(InvalidRanges, ANegativeRangeIsTreatedAsNoReading)
 
 TEST(InvalidRanges, AnEntirelyInvalidScanIsRefused)
 {
-  fsm_lidar_odometry::Matcher matcher(parameters());
+  fsm_localisation::Matcher matcher(parameters());
 
   const std::vector<double> all_infinite(kSize, kInfinity);
   const auto result = matcher.process(all_infinite);
 
   ASSERT_FALSE(result.has_value());
-  EXPECT_EQ(result.error(), fsm_lidar_odometry::MatchError::scan_entirely_invalid);
+  EXPECT_EQ(result.error(), fsm_localisation::MatchError::scan_entirely_invalid);
 }
 
 TEST(InvalidRanges, AnEntirelyInvalidScanDoesNotBecomeTheReference)
 {
-  fsm_lidar_odometry::Matcher matcher(parameters());
+  fsm_localisation::Matcher matcher(parameters());
 
   ASSERT_FALSE(matcher.process(roomScan(3.0, 2.5)).has_value());
 
@@ -177,12 +177,12 @@ TEST(InvalidRanges, AnEntirelyInvalidScanDoesNotBecomeTheReference)
 
 TEST(InvalidRanges, IsValidRangeAgreesWithItsDocumentation)
 {
-  EXPECT_TRUE(fsm_lidar_odometry::isValidRange(1.0));
-  EXPECT_FALSE(fsm_lidar_odometry::isValidRange(0.0));
-  EXPECT_FALSE(fsm_lidar_odometry::isValidRange(-1.0));
-  EXPECT_FALSE(fsm_lidar_odometry::isValidRange(kInfinity));
-  EXPECT_FALSE(fsm_lidar_odometry::isValidRange(-kInfinity));
-  EXPECT_FALSE(fsm_lidar_odometry::isValidRange(kNotANumber));
+  EXPECT_TRUE(fsm_localisation::isValidRange(1.0));
+  EXPECT_FALSE(fsm_localisation::isValidRange(0.0));
+  EXPECT_FALSE(fsm_localisation::isValidRange(-1.0));
+  EXPECT_FALSE(fsm_localisation::isValidRange(kInfinity));
+  EXPECT_FALSE(fsm_localisation::isValidRange(-kInfinity));
+  EXPECT_FALSE(fsm_localisation::isValidRange(kNotANumber));
 }
 
 TEST(RecoverySeed, TheSameSeedProducesTheSameSequence)
@@ -225,10 +225,10 @@ TEST(RecoverySeed, TheSameSeedProducesTheSameSequence)
 
 TEST(RecoverySeed, TheParametersCarryTheSeedIntoTheMatcher)
 {
-  fsm_lidar_odometry::Parameters p;
+  fsm_localisation::Parameters p;
   p.rng_seed = 4242;
 
   EXPECT_EQ(p.rng_seed, 4242u);
-  EXPECT_EQ(fsm_lidar_odometry::Parameters{}.rng_seed, 0u)
+  EXPECT_EQ(fsm_localisation::Parameters{}.rng_seed, 0u)
     << "the default must keep drawing from hardware entropy";
 }

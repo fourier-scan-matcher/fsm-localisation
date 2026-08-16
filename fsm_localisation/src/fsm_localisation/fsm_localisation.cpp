@@ -17,7 +17,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
-#include "fsm_lidar_odometry/fsm_lidar_odometry.hpp"
+#include "fsm_localisation/fsm_localisation.hpp"
 
 #include <algorithm>
 #include <bit>
@@ -26,7 +26,7 @@
 #include <ranges>
 #include <utility>
 
-namespace fsm_lidar_odometry
+namespace fsm_localisation
 {
 
 namespace
@@ -215,4 +215,4 @@ void Matcher::setInitialPose(const Pose& pose)
     FSM::Utils::computeTransform(pose, Eigen::Matrix3d::Identity());
 }
 
-}  // namespace fsm_lidar_odometry
+}  // namespace fsm_localisation

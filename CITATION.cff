@@ -7,7 +7,7 @@ preferred-citation:
   conference: "2022 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)"
   pages: "6968-6975"
   url: https://doi.org/10.1109/IROS47612.2022.9981228
-  codeurl: https://github.com/fourier-scan-matcher/fsm-lidar-odometry
+  codeurl: https://github.com/fourier-scan-matcher/fsm-localisation
   authors:
     - family-names: Filotheou
       given-names: Alexandros

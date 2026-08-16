@@ -61,21 +61,21 @@ if [ -n "${USE_INIT}" ]; then
 fi
 
 # ------------------------------------------------------------------------------
-USER=fsm_lidar_odometry
+USER=fsm_localisation
 
 # fix stdout/stderr permissions to allow non-root user
 chown --dereference $USER "/proc/$$/fd/1" "/proc/$$/fd/2" || :
 
 # xterm does not open for some reason. See docker-compose.yml's line
-# `- ${XAUTHORITY:-$HOME/.Xauthority}:/home/fsm_lidar_odometry/.Xauthority`
+# `- ${XAUTHORITY:-$HOME/.Xauthority}:/home/fsm_localisation/.Xauthority`
 # Otherwise use
 # https://stackoverflow.com/a/44434831/5297684
 # which essentially boils down to
 # (host)      xauth list
 # (host)      *copy result*
-# (container) touch /home/fsm_lidar_odometry/.Xauthority
+# (container) touch /home/fsm_localisation/.Xauthority
 # (container) xauth add <the line you copied>
-#chmod 777 /home/fsm_lidar_odometry/.Xauthority
+#chmod 777 /home/fsm_localisation/.Xauthority
 
 # In case the host user's uid is not equal to the container's user's uid (1000)
 # the bind mount `/home/$USER/ros2_ws/src` (see docker-compose.yml:volumes)
@@ -89,7 +89,7 @@ chmod -R o+rwX /home/$USER/shared-input
 chown -R $USER:$USER /home/$USER/shared-output
 chmod -R o+rwX /home/$USER/shared-output
 
-# Drop from root to fsm_lidar_odometry
+# Drop from root to fsm_localisation
 set -- gosu $USER "$@"
 # ------------------------------------------------------------------------------
 

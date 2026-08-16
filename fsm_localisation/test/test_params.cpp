@@ -36,7 +36,7 @@
 
 #include <string>
 
-#include "fsm_lidar_odometry/fsm_lidar_odometry.hpp"
+#include "fsm_localisation/fsm_localisation.hpp"
 
 namespace
 {
@@ -56,7 +56,7 @@ bool mentions(const std::string& message, const std::string& setting)
  */
 TEST(ParameterValidation, TheDefaultsAreAccepted)
 {
-  EXPECT_EQ(fsm_lidar_odometry::validate(fsm_lidar_odometry::Parameters{}), std::string{});
+  EXPECT_EQ(fsm_localisation::validate(fsm_localisation::Parameters{}), std::string{});
 }
 
 /*
@@ -66,10 +66,10 @@ TEST(ParameterValidation, TheDefaultsAreAccepted)
  */
 TEST(ParameterValidation, AScanSizeOfZeroIsAcceptedAndMeansMatchWhole)
 {
-  fsm_lidar_odometry::Parameters parameters;
+  fsm_localisation::Parameters parameters;
   parameters.size_scan = 0;
 
-  EXPECT_EQ(fsm_lidar_odometry::validate(parameters), std::string{});
+  EXPECT_EQ(fsm_localisation::validate(parameters), std::string{});
 }
 
 /*
@@ -78,10 +78,10 @@ TEST(ParameterValidation, AScanSizeOfZeroIsAcceptedAndMeansMatchWhole)
  */
 TEST(ParameterValidation, ZeroIterationsAreRefused)
 {
-  fsm_lidar_odometry::Parameters parameters;
+  fsm_localisation::Parameters parameters;
   parameters.num_iterations = 0;
 
-  const std::string problem = fsm_lidar_odometry::validate(parameters);
+  const std::string problem = fsm_localisation::validate(parameters);
 
   EXPECT_FALSE(problem.empty());
   EXPECT_TRUE(mentions(problem, "num_iterations")) << problem;
@@ -94,10 +94,10 @@ TEST(ParameterValidation, ZeroIterationsAreRefused)
  */
 TEST(ParameterValidation, ANegativePositionBoundIsRefused)
 {
-  fsm_lidar_odometry::Parameters parameters;
+  fsm_localisation::Parameters parameters;
   parameters.xy_bound = -0.2;
 
-  const std::string problem = fsm_lidar_odometry::validate(parameters);
+  const std::string problem = fsm_localisation::validate(parameters);
 
   EXPECT_FALSE(problem.empty());
   EXPECT_TRUE(mentions(problem, "xy_bound")) << problem;
@@ -106,10 +106,10 @@ TEST(ParameterValidation, ANegativePositionBoundIsRefused)
 
 TEST(ParameterValidation, ANegativeOrientationBoundIsRefused)
 {
-  fsm_lidar_odometry::Parameters parameters;
+  fsm_localisation::Parameters parameters;
   parameters.t_bound = -0.5;
 
-  const std::string problem = fsm_lidar_odometry::validate(parameters);
+  const std::string problem = fsm_localisation::validate(parameters);
 
   EXPECT_FALSE(problem.empty());
   EXPECT_TRUE(mentions(problem, "t_bound")) << problem;
@@ -123,11 +123,11 @@ TEST(ParameterValidation, ANegativeOrientationBoundIsRefused)
  */
 TEST(ParameterValidation, BoundsOfExactlyZeroAreAllowed)
 {
-  fsm_lidar_odometry::Parameters parameters;
+  fsm_localisation::Parameters parameters;
   parameters.xy_bound = 0.0;
   parameters.t_bound = 0.0;
 
-  EXPECT_EQ(fsm_lidar_odometry::validate(parameters), std::string{});
+  EXPECT_EQ(fsm_localisation::validate(parameters), std::string{});
 }
 
 /*
@@ -136,10 +136,10 @@ TEST(ParameterValidation, BoundsOfExactlyZeroAreAllowed)
  */
 TEST(ParameterValidation, ACounterLimitOfZeroIsRefused)
 {
-  fsm_lidar_odometry::Parameters parameters;
+  fsm_localisation::Parameters parameters;
   parameters.max_counter = 0;
 
-  const std::string problem = fsm_lidar_odometry::validate(parameters);
+  const std::string problem = fsm_localisation::validate(parameters);
 
   EXPECT_FALSE(problem.empty());
   EXPECT_TRUE(mentions(problem, "max_counter")) << problem;
@@ -151,11 +151,11 @@ TEST(ParameterValidation, ACounterLimitOfZeroIsRefused)
  */
 TEST(ParameterValidation, AnInvertedMagnificationRangeIsRefused)
 {
-  fsm_lidar_odometry::Parameters parameters;
+  fsm_localisation::Parameters parameters;
   parameters.min_magnification_size = 3;
   parameters.max_magnification_size = 1;
 
-  const std::string problem = fsm_lidar_odometry::validate(parameters);
+  const std::string problem = fsm_localisation::validate(parameters);
 
   EXPECT_FALSE(problem.empty());
   EXPECT_TRUE(mentions(problem, "max_magnification_size")) << problem;
@@ -168,11 +168,11 @@ TEST(ParameterValidation, AnInvertedMagnificationRangeIsRefused)
  */
 TEST(ParameterValidation, AMagnificationRangeOfOneLevelIsAllowed)
 {
-  fsm_lidar_odometry::Parameters parameters;
+  fsm_localisation::Parameters parameters;
   parameters.min_magnification_size = 2;
   parameters.max_magnification_size = 2;
 
-  EXPECT_EQ(fsm_lidar_odometry::validate(parameters), std::string{});
+  EXPECT_EQ(fsm_localisation::validate(parameters), std::string{});
 }
 
 /*
@@ -182,10 +182,10 @@ TEST(ParameterValidation, AMagnificationRangeOfOneLevelIsAllowed)
  */
 TEST(ParameterValidation, ForbiddingRecoveryIsAllowed)
 {
-  fsm_lidar_odometry::Parameters parameters;
+  fsm_localisation::Parameters parameters;
   parameters.max_recoveries = 0;
 
-  EXPECT_EQ(fsm_lidar_odometry::validate(parameters), std::string{});
+  EXPECT_EQ(fsm_localisation::validate(parameters), std::string{});
 }
 
 /*
@@ -196,21 +196,21 @@ TEST(ParameterValidation, ForbiddingRecoveryIsAllowed)
  */
 TEST(ParameterValidation, EitherRaySearchIsAcceptedByName)
 {
-  fsm_lidar_odometry::Parameters parameters;
+  fsm_localisation::Parameters parameters;
 
   parameters.ray_search = "angular";
-  EXPECT_EQ(fsm_lidar_odometry::validate(parameters), std::string{});
+  EXPECT_EQ(fsm_localisation::validate(parameters), std::string{});
 
   parameters.ray_search = "windowed";
-  EXPECT_EQ(fsm_lidar_odometry::validate(parameters), std::string{});
+  EXPECT_EQ(fsm_localisation::validate(parameters), std::string{});
 }
 
 TEST(ParameterValidation, AnUnknownRaySearchIsRefused)
 {
-  fsm_lidar_odometry::Parameters parameters;
+  fsm_localisation::Parameters parameters;
   parameters.ray_search = "Angular";
 
-  const std::string problem = fsm_lidar_odometry::validate(parameters);
+  const std::string problem = fsm_localisation::validate(parameters);
 
   EXPECT_TRUE(mentions(problem, "ray_search")) << problem;
   EXPECT_TRUE(mentions(problem, "Angular")) << problem;
@@ -223,11 +223,11 @@ TEST(ParameterValidation, AnUnknownRaySearchIsRefused)
  */
 TEST(ParameterValidation, TheFirstProblemIsTheOneReported)
 {
-  fsm_lidar_odometry::Parameters parameters;
+  fsm_localisation::Parameters parameters;
   parameters.num_iterations = 0;
   parameters.max_counter = 0;
 
-  const std::string problem = fsm_lidar_odometry::validate(parameters);
+  const std::string problem = fsm_localisation::validate(parameters);
 
   EXPECT_TRUE(mentions(problem, "num_iterations")) << problem;
   EXPECT_FALSE(mentions(problem, "max_counter")) << problem;

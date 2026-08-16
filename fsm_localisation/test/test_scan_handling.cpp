@@ -35,7 +35,7 @@
 #include <cmath>
 #include <vector>
 
-#include "fsm_lidar_odometry/fsm_lidar_odometry.hpp"
+#include "fsm_localisation/fsm_localisation.hpp"
 
 namespace
 {
@@ -158,16 +158,16 @@ TEST(ScanHandling, ASingleMissingRayIsFilled)
  */
 TEST(ScanHandling, AScanWithNothingMeasuredNeverReachesGapFilling)
 {
-  fsm_lidar_odometry::Parameters parameters;
+  fsm_localisation::Parameters parameters;
   parameters.size_scan = 8;
 
-  fsm_lidar_odometry::Matcher matcher(parameters);
+  fsm_localisation::Matcher matcher(parameters);
 
   const std::vector<double> nothing(8, 0.0);
   const auto result = matcher.process(nothing);
 
   ASSERT_FALSE(result.has_value());
-  EXPECT_EQ(result.error(), fsm_lidar_odometry::MatchError::scan_entirely_invalid);
+  EXPECT_EQ(result.error(), fsm_localisation::MatchError::scan_entirely_invalid);
 }
 
 /*
@@ -178,10 +178,10 @@ TEST(ScanHandling, AScanWithNothingMeasuredNeverReachesGapFilling)
  */
 TEST(ScanHandling, AScanIsMatchedAtTheSizeItArrivesWith)
 {
-  fsm_lidar_odometry::Parameters parameters;
+  fsm_localisation::Parameters parameters;
   parameters.size_scan = 0;
 
-  fsm_lidar_odometry::Matcher matcher(parameters);
+  fsm_localisation::Matcher matcher(parameters);
 
   EXPECT_EQ(matcher.matchSize(), 0u) << "nothing has arrived to settle it";
 
@@ -189,7 +189,7 @@ TEST(ScanHandling, AScanIsMatchedAtTheSizeItArrivesWith)
   const auto reference = matcher.process(first);
 
   ASSERT_FALSE(reference.has_value());
-  EXPECT_EQ(reference.error(), fsm_lidar_odometry::MatchError::no_reference_yet);
+  EXPECT_EQ(reference.error(), fsm_localisation::MatchError::no_reference_yet);
   EXPECT_EQ(matcher.matchSize(), 90u);
 
   const auto matched = matcher.process(uniformScan(90, kC));
@@ -205,10 +205,10 @@ TEST(ScanHandling, AScanIsMatchedAtTheSizeItArrivesWith)
  */
 TEST(ScanHandling, ALaterScanOfADifferentLengthIsResampledRatherThanRefused)
 {
-  fsm_lidar_odometry::Parameters parameters;
+  fsm_localisation::Parameters parameters;
   parameters.size_scan = 0;
 
-  fsm_lidar_odometry::Matcher matcher(parameters);
+  fsm_localisation::Matcher matcher(parameters);
 
   matcher.process(uniformScan(180, kC));
   ASSERT_EQ(matcher.matchSize(), 180u);
@@ -229,15 +229,15 @@ TEST(ScanHandling, ALaterScanOfADifferentLengthIsResampledRatherThanRefused)
  */
 TEST(ScanHandling, AScanShorterThanTheSizeAskedForIsRefused)
 {
-  fsm_lidar_odometry::Parameters parameters;
+  fsm_localisation::Parameters parameters;
   parameters.size_scan = 360;
 
-  fsm_lidar_odometry::Matcher matcher(parameters);
+  fsm_localisation::Matcher matcher(parameters);
 
   const auto result = matcher.process(uniformScan(90, kC));
 
   ASSERT_FALSE(result.has_value());
-  EXPECT_EQ(result.error(), fsm_lidar_odometry::MatchError::scan_too_short);
+  EXPECT_EQ(result.error(), fsm_localisation::MatchError::scan_too_short);
   EXPECT_EQ(matcher.matchSize(), 360u) << "asked for, not settled by a scan";
 }
 

@@ -17,7 +17,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
-#include "fsm_lidar_odometry/fsm_lidar_odometry_interface.hpp"
+#include "fsm_localisation/fsm_localisation_interface.hpp"
 
 #include <array>
 #include <stdexcept>
@@ -28,7 +28,7 @@
 #include <tf2/LinearMath/Matrix3x3.hpp>
 #include <tf2/LinearMath/Quaternion.hpp>
 
-namespace fsm_lidar_odometry
+namespace fsm_localisation
 {
 
 namespace
@@ -64,7 +64,7 @@ double yawOf(const geometry_msgs::msg::Quaternion& orientation)
 /*******************************************************************************
 */
 Interface::Interface(const rclcpp::NodeOptions& options)
-: rclcpp::Node("fsm_lidar_odometry", options)
+: rclcpp::Node("fsm_localisation", options)
 {
   declareParameters();
 
@@ -468,4 +468,4 @@ void Interface::stop(
   response->message = "lidar odometry stopped";
 }
 
-}  // namespace fsm_lidar_odometry
+}  // namespace fsm_localisation

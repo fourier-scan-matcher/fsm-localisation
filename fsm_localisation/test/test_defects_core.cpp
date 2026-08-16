@@ -52,7 +52,7 @@
 #include <cmath>
 #include <vector>
 
-#include "fsm_lidar_odometry/fsm_core.hpp"
+#include "fsm_localisation/fsm_core.hpp"
 
 namespace
 {
@@ -162,7 +162,7 @@ TEST(TranslationStage, FirstCoefficientNormIsDoublePrecision)
   double* in = static_cast<double*>(fftw_malloc(size * sizeof(double)));
   double* out = static_cast<double*>(fftw_malloc(size * sizeof(double)));
   const fftw_plan r2rp =
-    fftw_plan_r2r_1d(size, in, out, FFTW_R2HC, FSM_LIDAR_ODOMETRY_FFTW_PLAN_FLAG);
+    fftw_plan_r2r_1d(size, in, out, FFTW_R2HC, FSM_LOCALISATION_FFTW_PLAN_FLAG);
   fftw_free(in);
   fftw_free(out);
 
