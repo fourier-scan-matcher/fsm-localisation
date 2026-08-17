@@ -268,6 +268,30 @@ if(BUILD_TESTING)
   add_launch_test(test/test_initial_pose.py TIMEOUT 300
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
 
+  # The correcting mode, driven through a running node: what it recovers and
+  # what it refuses. Each case waits on a correction rather than on a clock, so
+  # the budget is for the whole file rather than for any one of them.
+  add_launch_test(test/test_amelioration_behaviour.py TIMEOUT 600
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
+
+  # A node that has never been given a map, and one that has never been given a
+  # scan. Neither state can be recovered once one has arrived, so these cases
+  # need a node of their own rather than a share of the one above.
+  add_launch_test(test/test_amelioration_startup.py TIMEOUT 300
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
+
+  # Both modes at once, which is the arrangement that would show a collision
+  # between them. Nothing is driven; what is asserted is the surface each
+  # presents, which is settled entirely at construction.
+  add_launch_test(test/test_mode_switch.py TIMEOUT 300
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
+
+  # Six misconfigured nodes, each dying on its own and saying which setting
+  # killed it. What the class refuses is asserted in a gtest; what an operator
+  # sees when it does is asserted here, by running the programme.
+  add_launch_test(test/test_refuses_to_start.py TIMEOUT 300
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
+
   foreach(test_target test_fsm_localisation_cbgl_defects test_fsm_localisation_core
                       test_fsm_localisation_core_golden
                       test_fsm_localisation_dft test_fsm_localisation_geometry

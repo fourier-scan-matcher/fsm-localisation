@@ -221,6 +221,7 @@ private:
   mutable std::mutex held_mutex_;
   std::shared_ptr<const Corrector> corrector_;
   std::shared_ptr<const OccupancyGridMap> map_;
+  geometry_msgs::msg::PoseWithCovarianceStamped::ConstSharedPtr latest_estimate_;
   sensor_msgs::msg::LaserScan::ConstSharedPtr latest_scan_;
 };
 

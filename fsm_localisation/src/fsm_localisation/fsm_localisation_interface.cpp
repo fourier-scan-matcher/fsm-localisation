@@ -300,20 +300,14 @@ void Interface::correctOnce(
     return;
   }
 
-  geometry_msgs::msg::PoseWithCovarianceStamped estimate;
+  geometry_msgs::msg::PoseWithCovarianceStamped::ConstSharedPtr estimate;
 
-  /*
-   * The listener is a throwaway node rather than this one, for the reason set
-   * out over setInitialPose: waiting on a subscription belonging to a node an
-   * executor is already spinning puts it into two wait sets at once.
-   */
-  const auto listener = std::make_shared<rclcpp::Node>(
-    std::string(get_name()) + "_estimate_listener");
+  {
+    const std::lock_guard<std::mutex> lock(held_mutex_);
+    estimate = latest_estimate_;
+  }
 
-  const bool arrived = rclcpp::wait_for_message(estimate, listener,
-    get_parameter("pose_estimate_input_topic").as_string());
-
-  if (!arrived)
+  if (!estimate)
   {
     response->success = false;
     response->message = "no pose estimate has arrived on "
@@ -322,7 +316,7 @@ void Interface::correctOnce(
     return;
   }
 
-  const std::string problem = correctFrom(estimate);
+  const std::string problem = correctFrom(*estimate);
 
   response->success = problem.empty();
   response->message = problem.empty() ? "corrected" : problem;
@@ -527,6 +521,16 @@ void Interface::declareParameters()
 void Interface::estimateCallback(
   geometry_msgs::msg::PoseWithCovarianceStamped::ConstSharedPtr estimate)
 {
+  /*
+   * Held whether or not it is acted on, so that the correct-once service has
+   * something to work from and so that a node still waiting for its map has
+   * the estimate ready when one arrives.
+   */
+  {
+    const std::lock_guard<std::mutex> lock(held_mutex_);
+    latest_estimate_ = estimate;
+  }
+
   if (locked_)
   {
     RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), kSlowInterval,
