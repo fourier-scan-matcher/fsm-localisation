@@ -1,8 +1,22 @@
 <launch>
+  <!--
+    One node, two modes, one launch file. Which mode a node runs in is settled
+    by the parameter file it is given, so a second node in the other mode is
+    this same file launched again with a different name and a different file.
+
+    Launched with no arguments it runs the odometry mode. For the correcting
+    mode, pass node_name and params together, the latter naming
+    config/params_amelioration.yaml under this package's share directory.
+
+    Two nodes may not share a name, which is what node_name is for. The two
+    parameter files carry different topic names for the same reason: run both
+    from one file's topics and they publish different message types on one
+    topic.
+  -->
   <let name="pkg_name"  value="fsm_localisation"/>
   <arg name="namespace" default="/"/>
   <arg name="node_name" default="fsm_localisation"/>
-  <arg name="params"    default="$(find-pkg-share fsm_localisation)/config/params.yaml"/>
+  <arg name="params"    default="$(find-pkg-share fsm_localisation)/config/params_odometry.yaml"/>
   <!-- ===================================================================== -->
   <node pkg="$(var pkg_name)"
         exec="$(var pkg_name)_interface_node"

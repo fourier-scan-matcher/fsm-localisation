@@ -1,0 +1,135 @@
+#______________________________________________________________________________
+# Lidar odometry: match each scan against the one before it and report how far
+# the sensor moved between them. No map and no pose estimate are needed.
+#
+# Launch it with
+#
+#   ros2 launch fsm_localisation fsm_localisation.launch.xml
+#
+# which uses this file and the node name fsm_localisation by default. To run
+# this alongside a correcting node, give each one its own name and its own file:
+#
+#   ros2 launch fsm_localisation fsm_localisation.launch.xml \
+#     node_name:=fsm_localisation_odometry
+#
+# The key below is the wildcard rather than a node name, so this file applies
+# whatever the node is called and renaming the node cannot silently drop every
+# setting in it.
+#______________________________________________________________________________
+/**:
+  ros__parameters:
+
+    # --------------------------------------------------------------------------
+    # Mode
+    # --------------------------------------------------------------------------
+    # There is no default: a node that does not know which of the two things it
+    # does has nothing sensible to fall back on, and it refuses to start rather
+    # than guess. The settings of the other mode live in params_amelioration.yaml
+    # and are not read here, so nothing in that file can stop this node.
+    mode: "odometry"
+
+    # --------------------------------------------------------------------------
+    # IO topics
+    # --------------------------------------------------------------------------
+    # 2d panoramic scans are read here.
+    scan_topic: "/base_scan"
+
+    # Optional; where an initial pose estimate may be provided. Otherwise the
+    # trajectory starts at (0,0,0).
+    initial_pose_topic: "/amcl_pose"
+
+    # The pose accumulated from every match so far, the whole trajectory, and
+    # the displacement between the last two scans as an odometry message.
+    pose_estimate_topic: "fsm_localisation/pose_estimate"
+    path_estimate_topic: "fsm_localisation/path_estimate"
+    lo_topic:            "fsm_localisation/lo"
+
+    # --------------------------------------------------------------------------
+    # Frames
+    # --------------------------------------------------------------------------
+    # The node publishes the transform between consecutive laser frames, from
+    # base_frame_id to lo_frame_id, and the current pose estimate with respect
+    # to global_frame_id. Frame names carry no leading slash; tf2 rejects one.
+    global_frame_id: "map"
+    base_frame_id:   "base_laser_link"
+    lo_frame_id:     "lo"
+
+    # --------------------------------------------------------------------------
+    # Matcher
+    # --------------------------------------------------------------------------
+    # How many rays a scan is matched at.
+    #
+    # 0 matches every ray the scan carries: the sensor's own resolution, with
+    # nothing discarded. The first scan to arrive settles the size for the
+    # session, since two scans can only be matched against each other at one
+    # size, and a later scan of a different length is resampled to it.
+    #
+    # Any other value reduces every scan to that many rays before matching, and
+    # refuses a scan carrying fewer. Execution time rises faster than the ray
+    # count does, so this is the setting to reach for when a match takes longer
+    # than the sensor takes to produce the next scan. The node says so when
+    # that happens.
+    size_scan: 0
+
+    # Base angular oversampling, and the maximum it may reach. Larger values buy
+    # accuracy with execution time.
+    min_magnification_size: 0
+    max_magnification_size: 3
+
+    # Greater sensor velocity requires higher values
+    num_iterations: 2
+
+    # Axis-wise and angular radii for generating a new initial estimate when a
+    # match goes badly and a recovery is attempted
+    xy_bound: 0.2
+    t_bound:  0.785398163397448
+
+    # Lower values decrease execution time
+    max_counter:    200
+    max_recoveries: 10
+
+    # 0 draws the recovery search from hardware entropy, as this algorithm has
+    # always done. Any other value pins it so that a run can be reproduced.
+    rng_seed: 0
+
+    # How each ray of a scan is matched to the wall it meets.
+    #
+    # "angular" offers each wall only to the rays that can reach it. It returns
+    # the nearest wall in front of every ray whatever shape the room is, and
+    # its execution time rises in step with size_scan.
+    #
+    # "windowed" narrows the search for each ray to the neighbourhood of the
+    # wall the previous ray met. It is what this algorithm shipped with, and it
+    # is kept so that a run can be compared against results published before
+    # "angular" existed. Its execution time rises with the square of size_scan,
+    # and where a room turns back on itself it can return a wall standing
+    # behind the nearest one.
+    ray_search: "angular"
+
+    # Three behaviours carried across from the scan-to-map matcher this package
+    # borrows from, each off by default so that the matcher behaves exactly as
+    # it always has while all three are off.
+
+    # Once the rotation criterion passes 0.99999, jump straight to the maximum
+    # angular oversampling instead of climbing to it. Fires at most once per
+    # match. Buys time on a match that is already going well.
+    enforce_early_gearup: false
+
+    # The translation stage abandons a candidate whose position has moved more
+    # than xy_bound + 0.01 on either axis from where the stage started, and
+    # treats it as a failure. Keeps a match from wandering, at the cost of
+    # giving up on one that would have come good.
+    enforce_translation_bound: false
+
+    # When every candidate angle fails its trial translation, start a recovery
+    # rather than carry on with the angle of a candidate that failed.
+    recover_on_failed_sift: false
+
+    # --------------------------------------------------------------------------
+    # Node behaviour
+    # --------------------------------------------------------------------------
+    # "reliable" mirrors what ROS 1 did. Sensor drivers commonly publish
+    # "best_effort", and a subscription that does not match its publisher
+    # receives nothing at all.
+    scan_qos_reliability: "reliable"
+    scan_qos_depth:       1

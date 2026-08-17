@@ -1,0 +1,188 @@
+#______________________________________________________________________________
+# Amelioration: match a scan against a map and report where the sensor actually
+# was, correcting a pose estimate somebody else produced. A map and a stream of
+# estimates are both needed.
+#
+# Launch it with
+#
+#   ros2 launch fsm_localisation fsm_localisation.launch.xml \
+#     node_name:=fsm_localisation_amelioration \
+#     params:=$(ros2 pkg prefix --share fsm_localisation)/config/params_amelioration.yaml
+#
+# Two nodes of this package can run side by side, one in each mode, by launching
+# the same file twice with a different name and a different parameter file each
+# time. Two nodes may not share a name, and the topics below are prefixed so
+# that the two never publish different message types on one topic.
+#
+# The key below is the wildcard rather than a node name, so this file applies
+# whatever the node is called and renaming the node cannot silently drop every
+# setting in it.
+#______________________________________________________________________________
+/**:
+  ros__parameters:
+
+    # --------------------------------------------------------------------------
+    # Mode
+    # --------------------------------------------------------------------------
+    # There is no default: a node that does not know which of the two things it
+    # does has nothing sensible to fall back on, and it refuses to start rather
+    # than guess. The settings of the other mode live in params_odometry.yaml
+    # and are not read here, so nothing in that file can stop this node.
+    mode: "amelioration"
+
+    # --------------------------------------------------------------------------
+    # IO topics
+    # --------------------------------------------------------------------------
+    # 2d panoramic scans are read here. The newest one is held until an estimate
+    # asks for it; a scan on its own causes nothing to happen.
+    scan_topic: "/base_scan"
+
+    # The map to match against. Subscribed with transient local durability and a
+    # depth of one, so a map latched before this node started is delivered on
+    # subscription rather than waited for. A second map replaces the first; a
+    # correction already running finishes against the map it started with.
+    map_topic: "/map"
+
+    # The estimates to correct. Each one arriving is what triggers a correction.
+    pose_estimate_input_topic: "/amcl_pose"
+
+    # Where the corrected estimate is published, carrying the covariance of the
+    # estimate it corrected untouched.
+    pose_estimate_topic: "fsm_localisation_amelioration/pose_estimate"
+
+    # The scan the corrected pose would see, cast from the map, for laying over
+    # the scan the sensor did see. Costs one extra cast per correction and
+    # nothing in the matching depends on it. Leave empty to publish nothing.
+    map_scan_topic: "fsm_localisation_amelioration/map_scan"
+
+    # --------------------------------------------------------------------------
+    # Frames
+    # --------------------------------------------------------------------------
+    # The frame the map and every published pose are expressed in. An estimate
+    # naming any other frame is refused rather than assumed to mean this one.
+    global_frame_id: "map"
+
+    # The sensor's own frame. Note that the sensor's frame used for a correction
+    # is read off the scan message rather than from here, so that nothing has to
+    # be told twice what the scan already says.
+    base_frame_id: "base_laser_link"
+
+    # The robot's own frame, which is what an incoming estimate places. The node
+    # works out where the sensor sits on the robot by looking up this frame
+    # against the scan's own, so this transform must exist in the tree or every
+    # correction is refused for want of it.
+    robot_frame_id: "base_footprint"
+
+    # Two frames that exist only to carry this node's answer, so no existing
+    # tree gains a second parent. The first receives the estimate as it arrived,
+    # the second the correction alone; composing the two gives the corrected
+    # robot pose. Frame names carry no leading slash; tf2 rejects one.
+    estimate_frame_id:   "fsm_localisation_amelioration/estimate"
+    correction_frame_id: "fsm_localisation_amelioration/corrected"
+
+    # --------------------------------------------------------------------------
+    # Map
+    # --------------------------------------------------------------------------
+    # Which algorithm casts a ray into the map: "ray_marching", "bresenham" or
+    # "cddt". One is built per map, not three.
+    #
+    # "ray_marching" walks the true line and is the default. "bresenham" walks a
+    # lattice approximation of it, which costs accuracy on a ray meeting a wall
+    # at a shallow angle. "cddt" precomputes a table, which costs time and
+    # memory when a map arrives and quantises the cast heading to half a degree
+    # thereafter, which at thirty metres is worse than a five centimetre map.
+    map_scan_method: "ray_marching"
+
+    # A cell at or above this is blocked, on the nought to one hundred scale an
+    # occupancy grid states a cell in. A cell no sensor has ever seen blocks a
+    # ray whatever this is set to: the matcher may not walk into territory the
+    # map says nothing about.
+    occupancy_threshold: 65
+
+    # How long to wait for the sensor's placement to appear in the transform
+    # tree before giving up on one correction. Seconds. The next estimate is
+    # tried afresh.
+    tf_lookup_timeout: 0.1
+
+    # --------------------------------------------------------------------------
+    # Matcher
+    # --------------------------------------------------------------------------
+    # How many rays a scan is matched at.
+    #
+    # 0 matches every ray the scan carries: the sensor's own resolution, with
+    # nothing discarded. It is settled afresh for every correction, since one
+    # correction is never compared against another.
+    #
+    # Any other value reduces every scan to that many rays before matching, and
+    # refuses a scan carrying fewer. Execution time rises faster than the ray
+    # count does, so this is the setting to reach for when a correction takes
+    # longer than the interval between estimates. The node says so when that
+    # happens.
+    size_scan: 0
+
+    # Base angular oversampling, and the maximum it may reach. Larger values buy
+    # accuracy with execution time.
+    min_magnification_size: 0
+    max_magnification_size: 3
+
+    # Greater displacement between the estimate and the truth requires higher
+    # values.
+    num_iterations: 2
+
+    # Axis-wise and angular radii for generating a new initial estimate when a
+    # match goes badly and a recovery is attempted. These also bound how far
+    # from the estimate a correction will look, so an estimate expected to be
+    # badly out needs a larger xy_bound.
+    xy_bound: 0.2
+    t_bound:  0.785398163397448
+
+    # Lower values decrease execution time
+    max_counter:    200
+    max_recoveries: 10
+
+    # 0 draws the recovery search from hardware entropy, as this algorithm has
+    # always done. Any other value pins it so that a correction can be repeated
+    # exactly.
+    rng_seed: 0
+
+    # How each ray of a scan is matched to the wall it meets.
+    #
+    # "angular" offers each wall only to the rays that can reach it. It returns
+    # the nearest wall in front of every ray whatever shape the room is, and
+    # its execution time rises in step with size_scan.
+    #
+    # "windowed" narrows the search for each ray to the neighbourhood of the
+    # wall the previous ray met. It is what this algorithm shipped with, and it
+    # is kept so that a run can be compared against results published before
+    # "angular" existed. Its execution time rises with the square of size_scan,
+    # and where a room turns back on itself it can return a wall standing
+    # behind the nearest one.
+    ray_search: "angular"
+
+    # Three behaviours carried across from the scan-to-map matcher this package
+    # borrows from, each off by default so that the matcher behaves exactly as
+    # it always has while all three are off.
+
+    # Once the rotation criterion passes 0.99999, jump straight to the maximum
+    # angular oversampling instead of climbing to it. Fires at most once per
+    # match. Buys time on a match that is already going well.
+    enforce_early_gearup: false
+
+    # The translation stage abandons a candidate whose position has moved more
+    # than xy_bound + 0.01 on either axis from where the stage started, and
+    # treats it as a failure. Keeps a correction from wandering off the map, at
+    # the cost of giving up on one that would have come good.
+    enforce_translation_bound: false
+
+    # When every candidate angle fails its trial translation, start a recovery
+    # rather than carry on with the angle of a candidate that failed.
+    recover_on_failed_sift: false
+
+    # --------------------------------------------------------------------------
+    # Node behaviour
+    # --------------------------------------------------------------------------
+    # "reliable" mirrors what ROS 1 did. Sensor drivers commonly publish
+    # "best_effort", and a subscription that does not match its publisher
+    # receives nothing at all.
+    scan_qos_reliability: "reliable"
+    scan_qos_depth:       1
