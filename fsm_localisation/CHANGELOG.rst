@@ -1,9 +1,71 @@
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-Changelog for package fsm_lo
+Changelog for package fsm_localisation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Forthcoming
 -----------
+* First release of ``fsm_localisation``. One node with two modes, one matcher
+  underneath both. ``odometry`` matches each scan against the one before it and
+  reports how far the sensor moved. ``amelioration`` matches a scan against a
+  ``nav_msgs/msg/OccupancyGrid`` and reports where the sensor actually was,
+  correcting a pose estimate somebody else produced.
+* The odometry mode is ``fsm_lidar_odometry`` renamed, taken from commit
+  ``d343895c73cb535b40a758b3f86a6cfee01574a5``, and is unchanged rather than
+  merely equivalent. Every step of the merge that touched the matcher compared
+  disassembly before and after, and where anything moved, ran all 97 match steps
+  of three recorded scenarios through both builds at full precision. Driven over
+  the recordings the predecessor's own proof tree holds, the two agree to
+  fourteen decimal places on every published quantity.
+* The scan-to-map half is new. Its ray casting is ``range_libc`` by Corey H.
+  Walsh, Apache 2.0, vendored under ``include/fsm_localisation/range_libc/`` and
+  taken from cbgl's copy of it, cut to three casters. Given the same grid and
+  the same rays, this copy and cbgl's answer identically on every one of 705024
+  casts. Four defects in cbgl's additions were corrected on the way in and are
+  recorded in the readme beside that code.
+* Unlike cbgl, the matcher casts into the map at every pose it tries rather than
+  matching against one scan frozen at the pose the correction started from. What
+  comes back is a corrected pose rather than a displacement.
+* Adds the ``mode`` parameter, which has no default: a node that does not know
+  which of the two things it does refuses to start and exits rather than guess.
+* ``config/params.yaml`` becomes ``config/params_odometry.yaml`` and
+  ``config/params_amelioration.yaml``, both keyed by the wildcard ``/**:``
+  rather than by a node name, so a file applies whatever the node is called.
+  Only the running mode's settings are read, so one file can serve a mode while
+  carrying nonsense for the other. Two nodes, one in each mode, run side by side
+  from the one launch file.
+* The four service names follow the node's name, as they always have, so they
+  are now ``fsm_localisation/start`` and so on. Their types and behaviour are
+  unchanged. The amelioration mode offers ``start``, ``stop`` and
+  ``correct_once`` instead.
+* The default topic names follow the node's name too, so what was
+  ``fsm_lidar_odometry/pose_estimate`` is now ``fsm_localisation/pose_estimate``
+  and the same for ``path_estimate``, ``lo`` and ``initial_pose``.
+  ``scan_topic`` still defaults to ``/base_scan``.
+* The matcher's entry point is ``FSM::Match::fmt``. It was ``fmtdbh``. This
+  matters only to code driving the core directly rather than through the node.
+* The core gained a reference handle, so the matcher can be handed either the
+  ring of points the odometry mode builds or an occupancy grid behind an
+  abstract interface. The ring path through it is unchanged.
+* Adds ``enforce_early_gearup``, ``enforce_translation_bound`` and
+  ``recover_on_failed_sift``, three behaviours carried across from the
+  scan-to-map matcher, all defaulting off so that the matcher behaves exactly as
+  it always has while all three are off. Available in both modes.
+* Corrects two further defects in the matcher, each characterised by a test that
+  failed first: an out of bounds read in the rotation stage, and a read of an
+  empty vector reachable through ``recover_on_failed_sift``. The first changes
+  the odometry path's reported rotation criterion, which the recorded scenarios
+  could not have caught because they compare poses.
+* Builds with ``-Ofast -fno-finite-math-only`` rather than bare ``-Ofast``.
+  ``-Ofast`` implies ``-ffinite-math-only``, under which a guard against a value
+  that is not a number folds away to nothing. Measured cost over 4636 matches:
+  26.86 ms a match before, 26.79 ms after, inside run to run noise.
+* Contributors: Alexandros Filotheou
+
+The entry below records the release of ``fsm_lidar_odometry``, which this
+package's odometry mode is. It is kept as it was written.
+
+Inherited from fsm_lidar_odometry, unreleased
+---------------------------------------------
 * First release. Ports the package from ROS 1 Kinetic to ROS 2, and is the
   first version published to a ROS distribution. The ROS 1 version was only
   ever available from source, so there is no earlier changelog to continue.

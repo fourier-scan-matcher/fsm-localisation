@@ -5,8 +5,18 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
 
-    image: li9i/fsm-localisation:lyrical
+    # A plain local tag, with no registry namespace: nothing is published from
+    # here, and a name carrying an account would suggest an image someone can
+    # pull rather than one they must build.
+    image: fsm-localisation:lyrical
     container_name: fsm_localisation
     tty: true
     network_mode: "host"
     ipc: host
+
+    # The two directories the image creates and the entrypoint hands to the
+    # container's user. Without these the container has nowhere to read a
+    # recording from and nowhere to write one to.
+    volumes:
+      - ./shared-input:/home/fsm_localisation/shared-input:rw
+      - ./shared-output:/home/fsm_localisation/shared-output:rw

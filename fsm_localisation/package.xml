@@ -2,7 +2,7 @@
 <package format="3">
   <name>fsm_localisation</name>
   <version>1.0.0</version>
-  <description>Lidar odometry from a single panoramic 2D lidar, by correspondenceless scan matching in the frequency domain.</description>
+  <description>Correspondenceless scan matching of panoramic 2D lidar scans in the frequency domain, in two modes: lidar odometry from consecutive scans, and correction of a pose estimate against an occupancy grid.</description>
   <maintainer email="alexandros.filotheou@gmail.com">Alexandros Filotheou</maintainer>
   <author email="alexandros.filotheou@gmail.com">Alexandros Filotheou</author>
   <license file="LICENSE">MIT</license>
