@@ -399,13 +399,13 @@ copy cost a round trip and bought nothing. The two that remain genuinely need th
 network. A retry with a short backoff around each would close it, and is left
 because the failure is loud rather than silent.
 
-A build has since run and the removal holds: the image carries the sources list
-the base image ships, byte for byte the file the deleted step used to fetch.
-
-What that build predates is the shell profile this package now carries and the
-two comment blocks removed from the entrypoint beside it. Both were proved by
-mounting the new file into the built image over its own copy, and neither has
-been through an image build.
+The image has since been rebuilt with every container change this package
+carries, and everything they claimed holds in it: the sources list the base
+image ships is present, byte for byte the file the deleted step used to fetch;
+a shell opens on a fifty six line profile with the workspace on its path,
+`colcon_cd` a function and no compiler exported; and the two shared directories
+are still owned by the host user after the container has mounted and written to
+them.
 
 ### The container cannot be told to run the node
 
