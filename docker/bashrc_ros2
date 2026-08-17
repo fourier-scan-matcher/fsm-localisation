@@ -32,25 +32,20 @@ export RCUTILS_CONSOLE_OUTPUT_FORMAT="[{severity} {time}][{name}]: {message} ({f
 # ------------------------------------------------------------------------------
 # Colcon
 # ------------------------------------------------------------------------------
-# Command completion and colcon_cd, each guarded. They are conveniences, and
-# they are not all installed on every image this file is copied into: unguarded,
-# a missing one greeted the operator with an error on every shell opened.
-[ -f /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash ] && \
-  source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash
+# colcon command completion
+source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash
+# register-python-argcomplete3 was renamed to register-python-argcomplete
+# upstream, dropping the version suffix; the old name no longer exists on
+# this release.
+eval "$(register-python-argcomplete ros2)"
+eval "$(register-python-argcomplete colcon)"
 
-for completer in register-python-argcomplete register-python-argcomplete3; do
-  if command -v "${completer}" > /dev/null; then
-    eval "$("${completer}" ros2)"
-    eval "$("${completer}" colcon)"
-    break
-  fi
-done
-
-if [ -f /usr/share/colcon_cd/function/colcon_cd.sh ]; then
-  source /usr/share/colcon_cd/function/colcon_cd.sh
-  export _colcon_cd_root=/opt/ros/lyrical/
-  alias roscd='colcon_cd'
-fi
+# colcon cd
+# colcon_cd.sh moved from /usr/share/colcon_cd/function/ to /etc/profile.d/
+# on this release.
+source /etc/profile.d/colcon_cd.sh
+export _colcon_cd_root=/opt/ros/lyrical/
+alias roscd='colcon_cd'
 # ------------------------------------------------------------------------------
 # colcon_build: Build ROS 2 packages in a specified or default workspace
 #
