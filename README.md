@@ -102,6 +102,20 @@ colcon build --packages-select fsm_localisation
 
 The two extra pieces are one stale rule and not a missing dependency. FFTW is declared in the manifest like everything else, but the `libfftw3` rule in `ros/rosdistro` resolves to `libfftw3-3`, a package Ubuntu dropped in favour of one per precision. Until that rule carries an override for this release, the key is skipped and the development package, which pulls the runtime it needs, is named directly. `docker/Dockerfile` does the same thing for the same reason.
 
+### As a dependency of your own package
+
+The matcher is usable without the node. Name this package in your manifest and link the target you want: `fsm_localisation::fsm_localisation_core` for the matcher on its own, which pulls in no ROS, or `fsm_localisation::fsm_localisation_interface` for the node's own class.
+
+```cmake
+find_package(fsm_localisation REQUIRED)
+
+target_link_libraries(your_target fsm_localisation::fsm_localisation_core)
+```
+
+Each target carries this package's headers and its own dependencies, so Eigen, CGAL and FFTW3 do not have to be found again on your side.
+
+One thing to know before trusting the numbers. Nearly all of the matcher is in the header, so what governs the arithmetic of what you call is the flags **you** compile with, not the ones this package was built with. The figures quoted here were measured at the settings its own `CMakeLists.txt` sets, and the tolerance you can hold it to at other settings has not been characterised.
+
 ## Run
 
 ### Launch
