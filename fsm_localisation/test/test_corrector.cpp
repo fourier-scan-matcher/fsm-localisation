@@ -20,8 +20,7 @@
 
 /**
  * @brief `Corrector`: an estimate displaced from where the sensor really was,
- *        put back by matching its scan against a map.
- *
+ * put back by matching its scan against a map.
  * @details
  * **How a case is built.** A room is drawn as an occupancy grid, a pose inside
  * it is chosen as the truth, and the scan that pose would see is cast from the
@@ -31,18 +30,15 @@
  * from the same map the correction reads means this file measures the matcher
  * and not the map: whether the map is a faithful rendering of a room is
  * `test_reference_agreement.cpp`'s question, and it answers it.
- *
  * **The room is not symmetric under any rotation.** A bare rectangle maps onto
  * itself under a half turn, so a heading error of pi could produce a scan
  * indistinguishable from the right one and pass. A pillar off the centre lines
  * removes every such coincidence.
- *
  * **What the answer is held to, and where the bound comes from.** A cast ray
  * stops at a cell, so a map cannot support a position better than one cell
  * however good the match is. That is the bound on position and it belongs to
  * the map rather than to the matcher, which is stated in the specification
  * rather than discovered here.
- *
  * The heading needs the same cell expressed as an angle. A heading wrong by
  * `dt` moves what the sensor would see at range `r` sideways by `r * dt`, so a
  * heading is resolved no better than one cell seen at the ranges the scan
@@ -67,7 +63,6 @@
 
 namespace
 {
-
 using fsm_localisation::CastingMethod;
 using fsm_localisation::CorrectionError;
 using fsm_localisation::CorrectionResult;
@@ -81,26 +76,16 @@ const std::int8_t kFree = 0;
 
 const int kOccupancyThreshold = 50;
 
-/* 6.05 m by 4.55 m at five centimetres a cell. Odd in both directions so the
- * room has a centre cell rather than a centre corner, and wider than it is
- * tall so a quarter turn cannot be mistaken for no turn. */
 const unsigned int kWidth = 121U;
 const unsigned int kHeight = 91U;
 const double kResolution = 0.05;
 
-/* Beyond the room's diagonal of 7.57 m, so a ray meeting nothing is
- * distinguishable from one meeting the far corner. */
 const double kRangeMax = 12.0;
 
 const unsigned int kNumRays = 360U;
 
-/* Off both centre lines and off both diagonals, so the scan from it is not
- * symmetric in any way the room might otherwise have been. */
 const Pose kTruth{1.53, 1.07, 0.4};
 
-/*******************************************************************************
- * A closed room with one pillar in it, as an occupancy grid message.
- */
 nav_msgs::msg::OccupancyGrid roomMessage()
 {
   nav_msgs::msg::OccupancyGrid message;
@@ -130,7 +115,6 @@ nav_msgs::msg::OccupancyGrid roomMessage()
     block(kWidth - 1U, row);
   }
 
-  /* The pillar: nine cells, off both centre lines. */
   for (unsigned int column = 80U; column <= 82U; column++)
     for (unsigned int row = 60U; row <= 62U; row++)
       block(column, row);
@@ -138,9 +122,6 @@ nav_msgs::msg::OccupancyGrid roomMessage()
   return message;
 }
 
-/*******************************************************************************
- * A grid with nothing in it at all, so every ray escapes.
- */
 nav_msgs::msg::OccupancyGrid emptyMessage()
 {
   nav_msgs::msg::OccupancyGrid message;
@@ -156,19 +137,6 @@ nav_msgs::msg::OccupancyGrid emptyMessage()
   return message;
 }
 
-/*******************************************************************************
- * A map standing behind the interface the corrector reaches a map through, in
- * which exactly one point is free.
- *
- * It exists for one case: the search that recovers a bad match draws positions
- * around the estimate until one is free, and here none ever is. The estimate
- * itself passes the corrector's entry guard, so the match starts; the first
- * step of the translation stage leaves the free point, which is what the core
- * reports as having left the map, and every recovery from there is a search
- * with nothing to find. That is the shape of an estimate that has wandered
- * into unmapped space, reduced to the smallest thing that produces it every
- * time rather than usually.
- */
 class OnePointOfFreeSpace : public FSM::GridReference
 {
  public:
@@ -183,25 +151,6 @@ class OnePointOfFreeSpace : public FSM::GridReference
     return x == free_point_.x && y == free_point_.y;
   }
 
-  /*
-   * Two things are needed of these ranges and they pull in opposite
-   * directions. Not every ray may be at the maximum, or the cast before the
-   * match refuses the case for the wrong reason. And they must not be a
-   * constant either: a scan of one range is a circle centred on the sensor,
-   * and a circle held against a circle gives a correction of exactly zero,
-   * so the pose never leaves the one free point and the match converges on
-   * the spot.
-   *
-   * The shape below carries one full turn of a sine around the ray fan, and
-   * that is the part that matters rather than the amplitude: the translation
-   * stage reads the first harmonic of the difference between the scan it was
-   * given and the scan it would see, so a shape built from any higher
-   * harmonic alone gives a correction of exactly zero just as a constant
-   * does. Because the shape does not depend on the pose it is asked from,
-   * the correction neither vanishes nor shrinks, so the first step of the
-   * translation stage carries the pose off the free point and every step
-   * after it keeps the pose off.
-   */
   std::vector<double> ranges(
     const Pose&, const unsigned int num_rays,
     const double max_range) const override
@@ -220,10 +169,6 @@ class OnePointOfFreeSpace : public FSM::GridReference
   Pose free_point_;
 };
 
-/*******************************************************************************
- * The parameters every case starts from: the shipping defaults with the
- * recovery search pinned, so a case that recovers gives the same answer twice.
- */
 Parameters defaultParameters()
 {
   Parameters parameters;
@@ -231,8 +176,6 @@ Parameters defaultParameters()
   return parameters;
 }
 
-/*******************************************************************************
-*/
 std::shared_ptr<const OccupancyGridMap> mapOf(
   const nav_msgs::msg::OccupancyGrid& message)
 {
@@ -242,10 +185,6 @@ std::shared_ptr<const OccupancyGridMap> mapOf(
   return map.has_value() ? *map : nullptr;
 }
 
-/*******************************************************************************
- * One cell seen at the ranges this scan actually carries, in radians. See the
- * file header for where this comes from.
- */
 double headingBound(const std::vector<double>& scan)
 {
   const double mean =
@@ -254,18 +193,13 @@ double headingBound(const std::vector<double>& scan)
   return std::atan(kResolution / mean);
 }
 
-/*******************************************************************************
- * The scan the truth pose sees, cast from the map itself.
- */
 std::vector<double> scanFromTruth(const OccupancyGridMap& map)
 {
   return map.ranges(kTruth, kNumRays, kRangeMax);
 }
 
-}  // namespace
+}
 
-/*******************************************************************************
-*/
 TEST(Corrector, AnEstimateDisplacedInPositionIsPutBack)
 {
   const std::shared_ptr<const OccupancyGridMap> map = mapOf(roomMessage());
@@ -287,8 +221,6 @@ TEST(Corrector, AnEstimateDisplacedInPositionIsPutBack)
   EXPECT_NEAR(corrected->corrected.t, kTruth.t, headingBound(scan));
 }
 
-/*******************************************************************************
-*/
 TEST(Corrector, AnEstimateDisplacedInHeadingIsPutBack)
 {
   const std::shared_ptr<const OccupancyGridMap> map = mapOf(roomMessage());
@@ -310,8 +242,6 @@ TEST(Corrector, AnEstimateDisplacedInHeadingIsPutBack)
   EXPECT_NEAR(corrected->corrected.t, kTruth.t, headingBound(scan));
 }
 
-/*******************************************************************************
-*/
 TEST(Corrector, AnEstimateDisplacedInBothIsPutBack)
 {
   const std::shared_ptr<const OccupancyGridMap> map = mapOf(roomMessage());
@@ -333,11 +263,6 @@ TEST(Corrector, AnEstimateDisplacedInBothIsPutBack)
   EXPECT_NEAR(corrected->corrected.t, kTruth.t, headingBound(scan));
 }
 
-/*******************************************************************************
- * Nothing survives a correction, so the same one asked twice is the same
- * question twice and must give the same answer to the last bit rather than to
- * a tolerance.
- */
 TEST(Corrector, TheSameCorrectionTwiceGivesTheSameAnswerExactly)
 {
   const std::shared_ptr<const OccupancyGridMap> map = mapOf(roomMessage());
@@ -363,10 +288,6 @@ TEST(Corrector, TheSameCorrectionTwiceGivesTheSameAnswerExactly)
   EXPECT_EQ(first->num_recoveries, second->num_recoveries);
 }
 
-/*******************************************************************************
- * The correction before this one cannot reach the one after it, which is the
- * whole of what "holds no state" means from outside.
- */
 TEST(Corrector, ACorrectionIsNotAffectedByTheOneBeforeIt)
 {
   const std::shared_ptr<const OccupancyGridMap> map = mapOf(roomMessage());
@@ -398,8 +319,6 @@ TEST(Corrector, ACorrectionIsNotAffectedByTheOneBeforeIt)
   EXPECT_EQ(alone->corrected.t, after->corrected.t);
 }
 
-/*******************************************************************************
-*/
 TEST(Corrector, AScanShorterThanTheConfiguredSizeIsRefused)
 {
   const std::shared_ptr<const OccupancyGridMap> map = mapOf(roomMessage());
@@ -419,10 +338,6 @@ TEST(Corrector, AScanShorterThanTheConfiguredSizeIsRefused)
   EXPECT_EQ(corrected.error(), CorrectionError::scan_too_short);
 }
 
-/*******************************************************************************
- * All three ways a driver says "no reading" at once, so the refusal cannot be
- * passing because of only one of them.
- */
 TEST(Corrector, AScanWithNoUsableRangeIsRefused)
 {
   const std::shared_ptr<const OccupancyGridMap> map = mapOf(roomMessage());
@@ -445,8 +360,6 @@ TEST(Corrector, AScanWithNoUsableRangeIsRefused)
   EXPECT_EQ(corrected.error(), CorrectionError::scan_entirely_invalid);
 }
 
-/*******************************************************************************
-*/
 TEST(Corrector, AnEstimateOutsideTheMapIsRefused)
 {
   const std::shared_ptr<const OccupancyGridMap> map = mapOf(roomMessage());
@@ -465,8 +378,6 @@ TEST(Corrector, AnEstimateOutsideTheMapIsRefused)
   EXPECT_EQ(corrected.error(), CorrectionError::estimate_not_in_free_space);
 }
 
-/*******************************************************************************
-*/
 TEST(Corrector, AnEstimateStandingInAWallIsRefused)
 {
   const std::shared_ptr<const OccupancyGridMap> map = mapOf(roomMessage());
@@ -476,7 +387,6 @@ TEST(Corrector, AnEstimateStandingInAWallIsRefused)
 
   const Corrector corrector(defaultParameters(), map);
 
-  /* The middle of the pillar, which spans columns 80 to 82 and rows 60 to 62. */
   const Pose in_the_pillar{81.5 * kResolution, 61.5 * kResolution, 0.0};
 
   ASSERT_FALSE(map->isFree(in_the_pillar.x, in_the_pillar.y));
@@ -488,10 +398,6 @@ TEST(Corrector, AnEstimateStandingInAWallIsRefused)
   EXPECT_EQ(corrected.error(), CorrectionError::estimate_not_in_free_space);
 }
 
-/*******************************************************************************
- * An empty grid has nothing for a ray to meet, so every ray leaves it and the
- * correction is refused before a match is spent reaching the same conclusion.
- */
 TEST(Corrector, AnEstimateSeeingNothingOnTheMapIsRefused)
 {
   const std::shared_ptr<const OccupancyGridMap> map = mapOf(emptyMessage());
@@ -511,11 +417,6 @@ TEST(Corrector, AnEstimateSeeingNothingOnTheMapIsRefused)
     CorrectionError::first_cast_entirely_at_max_range);
 }
 
-/*******************************************************************************
- * The refusal that stands between an estimate in unmapped space and a node
- * that stops answering. A bound on wall clock time is on the target rather
- * than in this case, because what a regression here produces is a hang.
- */
 TEST(Corrector, AMatchThatSpendsEveryRecoveryIsRefused)
 {
   const Pose estimate{1.0, 1.0, 0.0};

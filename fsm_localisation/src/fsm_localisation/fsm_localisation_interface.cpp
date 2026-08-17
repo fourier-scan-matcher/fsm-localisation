@@ -17,6 +17,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
+
 #include "fsm_localisation/fsm_localisation_interface.hpp"
 
 #include <array>
@@ -38,18 +39,10 @@
 
 namespace fsm_localisation
 {
-
 namespace
 {
-
-/* How often a repeated complaint is allowed to say itself, in milliseconds. */
 constexpr int kSlowInterval = 10000;
 
-/*
- * `b` expressed in the frame `a` is expressed in. Used to put the sensor on
- * the map from the robot's estimated pose and the sensor's placement on the
- * robot, and to put the correction back on the robot afterwards.
- */
 Pose compose(const Pose& a, const Pose& b)
 {
   const double cos_t = std::cos(a.t);
@@ -61,12 +54,6 @@ Pose compose(const Pose& a, const Pose& b)
     FSM::Utils::wrapAngle(a.t + b.t)};
 }
 
-/*
- * The exponent is inspected directly rather than asking std::isfinite,
- * following the reasoning set out over isValidRange in fsm_localisation.cpp:
- * this package ships under fast arithmetic, and a guard the compiler is
- * allowed to fold away is no guard at all.
- */
 bool isFinite(const double value)
 {
   const std::uint64_t bits = std::bit_cast<std::uint64_t>(value);
@@ -74,7 +61,6 @@ bool isFinite(const double value)
   return ((bits >> 52) & 0x7FFU) != 0x7FFU;
 }
 
-/* The frame `a` is expressed in, expressed in `a`. */
 Pose invert(const Pose& a)
 {
   const double cos_t = std::cos(a.t);
@@ -98,21 +84,6 @@ rclcpp::QoS scanQos(const std::string& reliability, int depth)
   return qos;
 }
 
-/*
- * Reading a heading out of a quaternion divides by the quaternion's own
- * length, so one of length zero has no heading to give. Four zeros is the
- * commonest way to arrive at one: it is what a bridge carrying ROS 1 traffic
- * delivers for an orientation nobody set, and what anybody assembling a pose
- * by hand produces on forgetting the fourth component. What the division then
- * yields is up to the compiler, and neither answer is usable. A value that is
- * not a number accumulates into every pose the node goes on to publish and no
- * later scan clears it; a heading of zero is a bearing nobody asked for,
- * quietly wrong for the rest of the run. Nothing is returned instead, and the
- * caller says so.
- *
- * This mirrors the refusal the occupancy grid reader already makes of the same
- * quaternion, so a pose and a map are held to one standard.
- */
 std::optional<double> yawOf(const geometry_msgs::msg::Quaternion& orientation)
 {
   if (!isFinite(orientation.x) || !isFinite(orientation.y) ||
@@ -141,7 +112,6 @@ std::optional<double> yawOf(const geometry_msgs::msg::Quaternion& orientation)
   return FSM::Utils::wrapAngle(yaw);
 }
 
-/* What a correction could not get past, as the sentence it is reported with. */
 std::string sentenceOf(const CorrectionError error)
 {
   switch (error)
@@ -164,10 +134,8 @@ std::string sentenceOf(const CorrectionError error)
   return "the correction failed for an unrecognised reason";
 }
 
-}  // namespace
+}
 
-/*******************************************************************************
-*/
 std::optional<Mode> modeFromName(const std::string& name)
 {
   if (name == "amelioration")
@@ -179,8 +147,6 @@ std::optional<Mode> modeFromName(const std::string& name)
   return std::nullopt;
 }
 
-/*******************************************************************************
-*/
 std::string_view nameOfMode(const Mode mode)
 {
   switch (mode)
@@ -195,8 +161,6 @@ std::string_view nameOfMode(const Mode mode)
   return "";
 }
 
-/*******************************************************************************
-*/
 Interface::Interface(const rclcpp::NodeOptions& options)
 : rclcpp::Node("fsm_localisation", options)
 {
@@ -212,13 +176,6 @@ Interface::Interface(const rclcpp::NodeOptions& options)
     throw std::invalid_argument(problem);
   }
 
-  /*
-   * The core reports in plain strings and does not say how serious any of them
-   * is, so none is invented here. Nearly everything it has to say is stage
-   * timing that an ordinary build compiles out entirely; what reaches this in
-   * an ordinary build is rare and worth seeing, which is why it goes out at
-   * info rather than debug.
-   */
   setDiagnosticSink(
     [this](const std::string& message)
     {
@@ -266,8 +223,6 @@ Interface::Interface(const rclcpp::NodeOptions& options)
     get_name());
 }
 
-/*******************************************************************************
-*/
 void Interface::clearTrajectory(
   const std::shared_ptr<std_srvs::srv::Trigger::Request>,
   std::shared_ptr<std_srvs::srv::Trigger::Response> response)
@@ -284,11 +239,6 @@ void Interface::clearTrajectory(
   response->message = "estimated trajectory cleared";
 }
 
-/*******************************************************************************
- * One correction on demand, from what the node is holding right now. The
- * outcome goes into the response rather than only into the log, since a caller
- * that asked for one correction is owed the answer to that question.
- */
 void Interface::correctOnce(
   const std::shared_ptr<std_srvs::srv::Trigger::Request>,
   std::shared_ptr<std_srvs::srv::Trigger::Response> response)
@@ -322,9 +272,6 @@ void Interface::correctOnce(
   response->message = problem.empty() ? "corrected" : problem;
 }
 
-/*******************************************************************************
- * Specification FR-4, steps 1 to 7.
- */
 std::string Interface::correctFrom(
   const geometry_msgs::msg::PoseWithCovarianceStamped& estimate)
 {
@@ -371,11 +318,6 @@ std::string Interface::correctFrom(
     estimate.pose.pose.position.y,
     *estimate_yaw};
 
-  /*
-   * Where the sensor sits on the robot. The robot's own frame is named by a
-   * parameter and the sensor's is read off the scan, which always carries it,
-   * so nothing here has to be told twice what the scan already says.
-   */
   geometry_msgs::msg::TransformStamped placement;
 
   try
@@ -414,11 +356,6 @@ std::string Interface::correctFrom(
 
   const rclcpp::Time stamp(estimate.header.stamp);
 
-  /*
-   * Under the same lock as the map and the scan, because a correction can be
-   * driven either by an estimate arriving or by the service, and the service
-   * group is reentrant.
-   */
   double interval = 0.0;
 
   {
@@ -427,12 +364,6 @@ std::string Interface::correctFrom(
     previous_estimate_stamp_ = stamp;
   }
 
-  /*
-   * The same complaint the odometry mode makes about scans, for the same
-   * reason and with the same remedy: a correction that outlasts the gap
-   * between estimates means estimates are going uncorrected, and the setting
-   * that buys the time back is the one that matches fewer rays.
-   */
   if (interval > 0.0 && corrected->execution_time > interval)
   {
     RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), kSlowInterval,
@@ -461,17 +392,12 @@ std::string Interface::correctFrom(
   return {};
 }
 
-/*******************************************************************************
-*/
 void Interface::declareParameters()
 {
   const std::string name = get_name();
 
-  /* Mode. No default: a node that does not know which of the two it is has
-   * nothing sensible to fall back on. */
   declare_parameter("mode", "");
 
-  /* Shared. */
   declare_parameter("scan_topic", "/base_scan");
   declare_parameter("pose_estimate_topic", name + "/pose_estimate");
 
@@ -496,13 +422,11 @@ void Interface::declareParameters()
   declare_parameter("enforce_translation_bound", false);
   declare_parameter("recover_on_failed_sift", false);
 
-  /* Odometry only. */
   declare_parameter("initial_pose_topic", name + "/initial_pose");
   declare_parameter("path_estimate_topic", name + "/path_estimate");
   declare_parameter("lo_topic", name + "/lo");
   declare_parameter("lo_frame_id", "lo");
 
-  /* Amelioration only. */
   declare_parameter("map_topic", "/map");
   declare_parameter("pose_estimate_input_topic", "/amcl_pose");
   declare_parameter("map_scan_topic", name + "/map_scan");
@@ -514,18 +438,9 @@ void Interface::declareParameters()
   declare_parameter("tf_lookup_timeout", 0.1);
 }
 
-/*******************************************************************************
- * An estimate is what drives a correction, so this is the trigger rather than
- * the scan.
- */
 void Interface::estimateCallback(
   geometry_msgs::msg::PoseWithCovarianceStamped::ConstSharedPtr estimate)
 {
-  /*
-   * Held whether or not it is acted on, so that the correct-once service has
-   * something to work from and so that a node still waiting for its map has
-   * the estimate ready when one arrives.
-   */
   {
     const std::lock_guard<std::mutex> lock(held_mutex_);
     latest_estimate_ = estimate;
@@ -545,10 +460,6 @@ void Interface::estimateCallback(
   }
 }
 
-/*******************************************************************************
- * A map replaces whatever came before it. A correction already running holds
- * its own reference and finishes against the map it started with.
- */
 void Interface::mapCallback(nav_msgs::msg::OccupancyGrid::ConstSharedPtr map)
 {
   const std::expected<std::shared_ptr<const OccupancyGridMap>, std::string> built =
@@ -574,11 +485,6 @@ void Interface::mapCallback(nav_msgs::msg::OccupancyGrid::ConstSharedPtr map)
     std::string(nameOfCastingMethod(casting_method_)).c_str());
 }
 
-/*******************************************************************************
- * The corrected robot pose. The covariance is the input's, copied through
- * untouched: this node measures a pose and has nothing to say about how
- * certain the sender was of the one it sent.
- */
 void Interface::publishCorrectedPose(
   const geometry_msgs::msg::PoseWithCovarianceStamped& estimate,
   const Pose& corrected_base)
@@ -592,12 +498,6 @@ void Interface::publishCorrectedPose(
   corrected_pose_publisher_->publish(message);
 }
 
-/*******************************************************************************
- * Two transforms to two frames that exist only for this purpose, so no
- * existing tree gains a second parent. The first carries the estimate as it
- * arrived; the second carries the correction alone, so anything wanting only
- * how far the estimate was out reads that one and nothing else.
- */
 void Interface::publishCorrectionTransforms(
   const Pose& estimated_base, const Pose& corrected_base,
   const rclcpp::Time& stamp)
@@ -631,15 +531,6 @@ void Interface::publishCorrectionTransforms(
     compose(invert(estimated_base), corrected_base));
 }
 
-/*******************************************************************************
- * The scan the corrected pose would see, for laying over the one the sensor
- * did see. Costs one extra cast per correction, and nothing in the matching
- * depends on it.
- *
- * The angular fields are the real scan's, verbatim, which is what makes the
- * two comparable. That is only meaningful where the real scan is a full turn,
- * which is the shape this matcher takes everywhere.
- */
 void Interface::publishMapScan(const sensor_msgs::msg::LaserScan& real_scan,
   const Pose& corrected_sensor, const rclcpp::Time& stamp)
 {
@@ -670,25 +561,6 @@ void Interface::publishMapScan(const sensor_msgs::msg::LaserScan& real_scan,
   map_scan_publisher_->publish(message);
 }
 
-/*******************************************************************************
- * Construct the lo_frame_id <- base_frame_id odometry message and publish it
- *
- * Two consecutive scans can carry the same stamp, and it is not a fault when
- * they do: a replayed recording is free to repeat one, and a driver that
- * stamps on publication rather than on acquisition can emit two inside a
- * single clock tick. A recording that does it is more likely to be replayed
- * than fixed, so this is an ordinary path and not an impossible one.
- *
- * The displacement between such a pair is measured and is published as
- * measured, since it is the node's whole product and dropping the message to
- * protect a field derived from it would cost more than it saved. The velocity
- * is left at zero. A displacement over no elapsed time is not a large rate, it
- * is no rate at all, and dividing anyway yields an infinity that any consumer
- * folding it into a filter carries for the rest of the run with no way back. A
- * zero is a claim about one sample that the next scan corrects. The same holds
- * for a stamp that goes backwards, which is why the interval is required to be
- * positive rather than merely different from zero.
- */
 void Interface::publishOdometry(const MatchResult& result,
   const rclcpp::Time& stamp, double interval)
 {
@@ -720,9 +592,6 @@ void Interface::publishOdometry(const MatchResult& result,
   odometry_publisher_->publish(message);
 }
 
-/*******************************************************************************
- * The total path estimate with respect to the global frame
- */
 void Interface::publishPath(const MatchResult& result,
   const rclcpp::Time& stamp)
 {
@@ -738,9 +607,6 @@ void Interface::publishPath(const MatchResult& result,
   path_publisher_->publish(path_);
 }
 
-/*******************************************************************************
- * The current pose estimate with respect to the global frame
- */
 void Interface::publishPose(const MatchResult& result,
   const rclcpp::Time& stamp)
 {
@@ -752,9 +618,6 @@ void Interface::publishPose(const MatchResult& result,
   pose_publisher_->publish(message);
 }
 
-/*******************************************************************************
- * Construct the lo_frame_id <- base_frame_id transform and publish it
- */
 void Interface::publishTransform(const MatchResult& result,
   const rclcpp::Time& stamp)
 {
@@ -777,10 +640,6 @@ void Interface::publishTransform(const MatchResult& result,
   transform_broadcaster_->sendTransform(message);
 }
 
-/*******************************************************************************
- * The mode is read before anything else, because everything else is read
- * differently depending on it.
- */
 Mode Interface::readMode()
 {
   const std::string name = get_parameter("mode").as_string();
@@ -798,12 +657,6 @@ Mode Interface::readMode()
   return *mode;
 }
 
-/*******************************************************************************
- * Only what the chosen mode uses is read, and therefore only what the chosen
- * mode uses is validated. A configuration file carrying a nonsense setting for
- * the mode that is not running starts the node, which is what lets one file
- * serve both modes.
- */
 Parameters Interface::readParameters(const Mode mode)
 {
   Parameters parameters;
@@ -842,8 +695,6 @@ Parameters Interface::readParameters(const Mode mode)
   return parameters;
 }
 
-/*******************************************************************************
-*/
 geometry_msgs::msg::Pose Interface::retypePose(const Pose& pose) const
 {
   geometry_msgs::msg::Pose message;
@@ -863,12 +714,6 @@ geometry_msgs::msg::Pose Interface::retypePose(const Pose& pose) const
   return message;
 }
 
-/*******************************************************************************
- * In the odometry mode a scan is the whole event. In the amelioration mode it
- * is held until an estimate asks for it, and only the newest one is kept: a
- * correction is answered from where the robot is now, not from where it was
- * when some earlier scan arrived.
- */
 void Interface::scanCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr scan)
 {
   if (mode_ == Mode::amelioration)
@@ -910,14 +755,6 @@ void Interface::scanCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr scan)
   RCLCPP_INFO(get_logger(), "FSM executed in %.1f ms",
     1000.0 * result->execution_time);
 
-  /*
-   * Execution time rises faster than the ray count does, so a scan matched at
-   * a high resolution can take longer than the sensor takes to produce the
-   * next one. Every scan arriving while this one is still being matched is
-   * dropped, the odometry thins out, and nothing so far says why. Say why, and
-   * name the setting that fixes it. Throttled, because a node that cannot keep
-   * up would otherwise say so on every scan it does manage.
-   */
   if (result->execution_time > interval)
   {
     RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), kSlowInterval,
@@ -928,13 +765,6 @@ void Interface::scanCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr scan)
       matcher_->matchSize());
   }
 
-  /*
-   * Recovery draws a pose at random, so a match that needed it is not
-   * reproducible across two builds even from the same seed: the standard
-   * library does not specify how a distribution turns random bits into a
-   * number. Any comparison of this node against another build is only as good
-   * as this line staying quiet.
-   */
   if (result->num_recoveries > 0)
   {
     RCLCPP_WARN(get_logger(),
@@ -948,21 +778,12 @@ void Interface::scanCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr scan)
   publishPath(*result, stamp);
 }
 
-/*******************************************************************************
- * If there is an initial pose then set it
- */
 void Interface::setInitialPose(
   const std::shared_ptr<std_srvs::srv::Trigger::Request>,
   std::shared_ptr<std_srvs::srv::Trigger::Response> response)
 {
   geometry_msgs::msg::PoseWithCovarianceStamped message;
 
-  /*
-   * The listener is a throwaway node rather than this one. Waiting on a
-   * subscription belonging to a node an executor is already spinning puts that
-   * subscription into two wait sets at once, which throws and takes the whole
-   * process down.
-   */
   const auto listener = std::make_shared<rclcpp::Node>(
     std::string(get_name()) + "_initial_pose_listener");
 
@@ -977,12 +798,6 @@ void Interface::setInitialPose(
     return;
   }
 
-  /*
-   * A pose the node cannot use is refused outright rather than repaired.
-   * Whatever is put in place of it would be reported as the operator's own
-   * starting point and carried through every pose the node publishes, and
-   * there is no way to tell afterwards that it was invented here.
-   */
   if (!isFinite(message.pose.pose.position.x) ||
     !isFinite(message.pose.pose.position.y))
   {
@@ -1018,8 +833,6 @@ void Interface::setInitialPose(
     pose.x, pose.y, pose.t);
 }
 
-/*******************************************************************************
-*/
 void Interface::setUpAmelioration(const Parameters& parameters)
 {
   const std::optional<CastingMethod> method =
@@ -1074,11 +887,6 @@ void Interface::setUpAmelioration(const Parameters& parameters)
   correction_frame_id_ = get_parameter("correction_frame_id").as_string();
   map_scan_topic_ = get_parameter("map_scan_topic").as_string();
 
-  /*
-   * tf2 refuses a frame whose name begins with a slash, and the refusal
-   * surfaces later, from inside a lookup, as a message about a frame that does
-   * not exist. Said here instead, once, about the setting that caused it.
-   */
   for (const auto& [name, value] : {
       std::pair<std::string, std::string>{"global_frame_id", global_frame_id_},
       {"robot_frame_id", robot_frame_id_},
@@ -1102,18 +910,12 @@ void Interface::setUpAmelioration(const Parameters& parameters)
     create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>(
       corrected_topic, 1);
 
-  /* An empty topic disables the inspection scan, which is the one thing here
-   * that exists to be looked at rather than used. */
   if (!map_scan_topic_.empty())
   {
     map_scan_publisher_ = create_publisher<sensor_msgs::msg::LaserScan>(
       map_scan_topic_, 1);
   }
 
-  /*
-   * Transient local with a depth of one, so a map latched before this node
-   * started is delivered on subscription rather than waited for forever.
-   */
   map_subscription_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
     map_topic, rclcpp::QoS(1).transient_local(),
     [this](nav_msgs::msg::OccupancyGrid::ConstSharedPtr map)
@@ -1136,8 +938,6 @@ void Interface::setUpAmelioration(const Parameters& parameters)
     rclcpp::ServicesQoS(), service_group_);
 }
 
-/*******************************************************************************
-*/
 void Interface::setUpOdometry(const Parameters& parameters)
 {
   matcher_ = std::make_unique<Matcher>(parameters);
@@ -1183,8 +983,6 @@ void Interface::setUpOdometry(const Parameters& parameters)
   path_.header.frame_id = global_frame_id_;
 }
 
-/*******************************************************************************
-*/
 void Interface::start(
   const std::shared_ptr<std_srvs::srv::Trigger::Request>,
   std::shared_ptr<std_srvs::srv::Trigger::Response> response)
@@ -1197,8 +995,6 @@ void Interface::start(
   response->message = std::string(nameOfMode(mode_)) + " started";
 }
 
-/*******************************************************************************
-*/
 void Interface::stop(
   const std::shared_ptr<std_srvs::srv::Trigger::Request>,
   std::shared_ptr<std_srvs::srv::Trigger::Response> response)
@@ -1211,4 +1007,4 @@ void Interface::stop(
   response->message = std::string(nameOfMode(mode_)) + " stopped";
 }
 
-}  // namespace fsm_localisation
+}

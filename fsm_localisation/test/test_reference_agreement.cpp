@@ -20,9 +20,8 @@
 
 /**
  * @brief One room expressed twice, as a ring of points and as an occupancy
- *        grid, and the ranges the matcher gets from each held against one
- *        another.
- *
+ * grid, and the ranges the matcher gets from each held against one
+ * another.
  * @details
  * This is the file that says the two kinds of reference mean the same thing,
  * rather than that each computes something. Both sides are reached the way the
@@ -30,14 +29,12 @@
  * so what is compared is what a match would see. The grid path additionally
  * carries `X::findGrid`'s round trip through a point on each ray, which is part
  * of what has to agree.
- *
  * **The room.** A rectangle with one corner cut away, given as the union of two
  * rectangles. It has no rotational symmetry of any kind, so a ray fan cast one
  * index out of step, mirrored, or turned by half a turn cannot match by luck.
  * That matters here because the ray angle convention is written twice, once in
  * `X::findExactAngular` and once in `OccupancyGridMap::ranges`, on opposite
  * sides of a module boundary.
- *
  * **Why the rasterisation is exact, and why that is the whole design of this
  * file.** Every wall sits at a multiple of the coarser of the two cell sizes,
  * and the coarser is a whole multiple of the finer, so no cell of either grid
@@ -47,20 +44,17 @@
  * cells would rasterise into a staircase, its rasterised face would stand up to
  * a cell from its true one, and the measurement below would be of the fixture
  * rather than of the two references.
- *
  * **What a range is measured to.** The ring answers with the exact distance to
  * the wall's near face. A caster cannot: it answers with a distance to a cell.
  * The rest of this work measures its analytic ranges to the centre of the first
  * cell a ray enters and says so; the bounds below are built from the same
  * convention, as the distance between what the two references can each say
  * about the same crossing.
- *
  * **The bounds, read off each caster rather than off a run.** Both are numbers
  * of cells, which is what makes the disagreement scale with the cell size, and
  * both are reached by asking two questions of a caster: how far along the ray
  * its samples are spaced, and how far its answer can sit from the sample it
  * stopped at.
- *
  * *Bresenham*, `RangeLib.h:543`. It steps one whole cell at a time along
  * whichever axis the ray runs faster in, so its samples are
  * `1 / max(|cos|,|sin|)` cells apart along the ray, between one and `sqrt(2)`.
@@ -73,9 +67,7 @@
  * of walking a line on a lattice rather than a defect, and it is what makes a
  * flat one cell bound wrong: a ray meeting a wall at six degrees can be five
  * cells out and still be right.
- *
- *     bresenham, in cells = 1 / max(|cos t|, |sin t|) + 0.5 / |sin a|
- *
+ * bresenham, in cells = 1 / max(|cos t|, |sin t|) + 0.5 / |sin a|
  * *Ray marching*, `RangeLib.h:626`. It follows the true line, so it has no
  * shallow angle term at all, and one other term instead. It advances by
  * `max(0.999 * d, 1)` cells where `d` is the distance transform read at the
@@ -90,15 +82,12 @@
  * cells on top, correlated with heading rather than random, and is the
  * defect `range_libc/README.md` records rather than a property of this file's
  * geometry.
- *
- *     ray marching, in cells = sqrt(2)
- *
+ * ray marching, in cells = sqrt(2)
  * **CDDT is not exercised here.** It quantises the cast heading as well as
  * space, and that term is `range * pi / 720` whatever the cell size is. A
  * method whose error does not shrink with the cells cannot take part in a
  * measurement of how the error shrinks with the cells. It has its own bound and
  * its own cases in `test_ray_casting.cpp`.
- *
  * **Rays that graze a corner are set aside, counted, and reported.** Which side
  * of a corner a ray passes decides which wall it meets, and the two references
  * decide that from positions that differ by up to a cell. A ray passing within
@@ -124,7 +113,6 @@
 
 namespace
 {
-
 using fsm_localisation::CastingMethod;
 using fsm_localisation::OccupancyGridMap;
 
@@ -133,54 +121,24 @@ const std::int8_t kFree = 0;
 
 const int kOccupancyThreshold = 50;
 
-/*
- * The room: the union of a wide low rectangle and a narrower tall one, which is
- * a rectangle with its top right corner cut away. Every coordinate is a
- * multiple of the coarse cell size below, so neither grid has a cell straddling
- * a wall.
- */
 const double kRoomRight = 3.20;
 const double kRoomTop = 2.40;
 const double kNotchLeft = 2.00;
 const double kNotchBottom = 1.60;
 
-/* The two cell sizes. The coarse one is four times the fine one and both divide
- * every wall coordinate above. */
 const double kFineResolution = 0.05;
 const double kCoarseResolution = 0.20;
 
-/* The grid holds the room and a margin of blocked cells all round it, so that
- * no ray can leave the grid without first meeting a wall. */
 const double kMargin = 0.40;
 
-/* Larger than the room's diagonal and larger than the grid's, so a range at the
- * maximum could only mean a ray that met nothing, which inside a closed room
- * cannot happen. */
 const double kMaxRange = 20.0;
 
-/* Odd, so that no ray lies exactly along the pose's own heading and the fan
- * carries no two-fold symmetry of its own to hide an error in. */
 const unsigned int kNumRays = 181U;
 
-/* A ray passing closer than this to a corner is not compared. One cell: the two
- * references place a point on the ray from positions that differ by up to a
- * cell, and within a cell of a corner that difference decides which side of the
- * corner the ray goes, and so which wall it meets. */
 const double kCornerGuardInCells = 1.0;
 
-/* A case that has set aside more than half its fan is not looking at enough of
- * the room to be measuring anything. This is a sanity bar on the fixture and is
- * not a bound on any quantity. */
 const double kMinComparedShare = 0.5;
 
-/*
- * A ray meeting its wall at an angle whose sine is at least this is met
- * squarely enough that Bresenham's shallow angle term, `0.5 / sin a`, is at
- * most one cell. The scaling measurement uses only such rays, so that what it
- * measures is the cell size and not the angle: with the shallow angle term
- * bounded by a cell, every bound below is a fixed number of cells and the
- * disagreement in metres has nowhere to come from but the cells.
- */
 const double kSquareEnoughSine = 0.5;
 
 struct NamedPose
@@ -204,12 +162,8 @@ struct RayComparison
 
 struct Disagreement
 {
-  /* The ray whose disagreement is largest in metres: what the scaling
-   * measurement is about. */
   RayComparison largest;
 
-  /* The ray that comes closest to its own bound: what the bound is about. A
-   * ratio at or below one is the bound holding. */
   RayComparison tightest;
 
   unsigned int compared{0U};
@@ -217,8 +171,6 @@ struct Disagreement
   unsigned int shallow{0U};
 };
 
-/* Declared here so that the definitions below can be in alphabetical order
- * whatever calls what. */
 double rayHeading(const unsigned int i, const unsigned int num_rays, const double t);
 
 std::vector<double> rangesFromTheGrid(
@@ -233,12 +185,6 @@ std::vector<std::pair<double, double>> roomRing();
 double sineOfTheAngleToTheWall(
   const double heading, const std::pair<double, double>& meeting);
 
-/*
- * How far a caster's answer may sit from the ring's, in cells, for a ray of
- * heading `heading` meeting a wall at an angle whose sine is `sine_to_wall`.
- * Both derivations are in the file header, and neither was arrived at by
- * looking at a result.
- */
 double boundInCells(
   const CastingMethod method, const double heading, const double sine_to_wall)
 {
@@ -251,10 +197,6 @@ double boundInCells(
   return sample_spacing + 0.5 / sine_to_wall;
 }
 
-/*
- * How far ray `i` from `pose` passes from the nearest corner of the room ahead
- * of it, measured across the ray. A very large number where no corner is ahead.
- */
 double cornerMiss(
   const FSM::Pose& pose, const unsigned int i, const unsigned int num_rays)
 {
@@ -278,14 +220,6 @@ double cornerMiss(
   return nearest;
 }
 
-/*
- * Whether a world point lies in the free space of the room, written as the
- * union of the two rectangles the room is made of so that a reader can check it
- * against the drawing rather than against a winding rule. The line
- * `y == kNotchBottom` is interior where `x < kNotchLeft` and is wall beyond it,
- * which is why the two rectangles are split there. No cell centre ever falls on
- * a wall, so which way that line is decided never reaches a grid.
- */
 bool isInsideTheRoom(const double x, const double y)
 {
   const bool in_the_low_wide_part =
@@ -297,11 +231,6 @@ bool isInsideTheRoom(const double x, const double y)
   return in_the_low_wide_part || in_the_tall_narrow_part;
 }
 
-/*
- * Every ray of every pose, compared. `square_only` keeps the rays that meet
- * their wall squarely enough for the bound to be a fixed number of cells; the
- * rest are counted as shallow and reported.
- */
 Disagreement measureDisagreement(
   const OccupancyGridMap& map, const CastingMethod method,
   const std::vector<NamedPose>& poses, const bool square_only)
@@ -372,11 +301,6 @@ std::string methodSuffix(const testing::TestParamInfo<CastingMethod>& info)
   return std::string(fsm_localisation::nameOfCastingMethod(info.param));
 }
 
-/*
- * The four poses every case casts from. None sits on a cell boundary of either
- * grid, so no case below rests on a tie being broken one way rather than the
- * other.
- */
 std::vector<NamedPose> posesInTheRoom()
 {
   return {
@@ -390,7 +314,6 @@ std::vector<NamedPose> posesInTheRoom()
       FSM::Pose{.x = 1.17, .y = 0.77, .t = M_PI / 4}}};
 }
 
-/* What the matcher sees when the reference is the grid. */
 std::vector<double> rangesFromTheGrid(
   const OccupancyGridMap& map, const FSM::Pose& pose, const unsigned int num_rays)
 {
@@ -400,7 +323,6 @@ std::vector<double> rangesFromTheGrid(
     pose);
 }
 
-/* What the matcher sees when the reference is the ring. */
 std::vector<double> rangesFromTheRing(const FSM::Pose& pose, const unsigned int num_rays)
 {
   const std::vector<std::pair<double, double>> ring = roomRing();
@@ -409,15 +331,12 @@ std::vector<double> rangesFromTheRing(const FSM::Pose& pose, const unsigned int 
     FSM::X::find(pose, ring, num_rays, FSM::RaySearch::angular), pose);
 }
 
-/* The heading of ray `i`, by the convention `X::findExactAngular` casts by. */
 double rayHeading(const unsigned int i, const unsigned int num_rays, const double t)
 {
   const double heading = i * 2 * M_PI / num_rays + t - M_PI;
   return std::fmod(heading + 5 * M_PI, 2 * M_PI) - M_PI;
 }
 
-/* The measurement itself, written out so that the numbers this file exists to
- * produce are in the log of a passing run and not only of a failing one. */
 void report(
   const char* which, const OccupancyGridMap& map, const Disagreement& measured)
 {
@@ -450,12 +369,6 @@ std::shared_ptr<const OccupancyGridMap> roomGrid(
   return built.value_or(nullptr);
 }
 
-/*
- * The same room as an occupancy grid at `resolution`: a cell is free when its
- * centre lies in the room and blocked otherwise. The only place in this file
- * that computes a cell's index into the message's flat `data`, in the message's
- * own row major order.
- */
 nav_msgs::msg::OccupancyGrid roomMessage(const double resolution)
 {
   const unsigned int width = static_cast<unsigned int>(
@@ -489,12 +402,6 @@ nav_msgs::msg::OccupancyGrid roomMessage(const double resolution)
   return message;
 }
 
-/*
- * The same room as the ordered ring of its corners the odometry mode has always
- * matched against. `X::findExactAngular` reads wall `l` as the segment from
- * point `l` to point `l+1` and closes the ring itself, so the last corner is
- * not repeated.
- */
 std::vector<std::pair<double, double>> roomRing()
 {
   return {
@@ -506,13 +413,6 @@ std::vector<std::pair<double, double>> roomRing()
     {0.0, kRoomTop}};
 }
 
-/*
- * The sine of the angle between a ray of heading `heading` and the wall its
- * crossing point `meeting` lies on: one where it meets the wall square on, and
- * towards zero where it grazes along it. The wall is found as the segment of
- * the ring the crossing point lies nearest to, which needs no assumption that
- * the room is axis aligned.
- */
 double sineOfTheAngleToTheWall(
   const double heading, const std::pair<double, double>& meeting)
 {
@@ -533,8 +433,6 @@ double sineOfTheAngleToTheWall(
     const double wy = to.second - from.second;
     const double length = std::hypot(wx, wy);
 
-    /* Where along the wall the crossing point falls, clamped to its ends, and
-     * how far the crossing point is from the wall there. */
     const double along = std::clamp(
       ((meeting.first - from.first) * wx + (meeting.second - from.second) * wy) /
         (length * length),
@@ -558,15 +456,8 @@ class ReferenceAgreement : public testing::TestWithParam<CastingMethod>
 {
 };
 
-}  // namespace
+}
 
-/*
- * The claim this file exists for, pose by pose so that a failure names the pose
- * that broke it. Every ray of every pose, from the middle of the room, from
- * beside a wall, from a corner and from a pose facing the cut away corner along
- * the diagonal, held against the bound its own geometry sets. No ray is
- * excused: what varies between them is the bound, not whether they are checked.
- */
 TEST_P(ReferenceAgreement, TheRingAndTheGridAnswerTheSameRoomAtEveryPose)
 {
   const std::shared_ptr<const OccupancyGridMap> map =
@@ -604,13 +495,6 @@ TEST_P(ReferenceAgreement, TheRingAndTheGridAnswerTheSameRoomAtEveryPose)
   }
 }
 
-/*
- * The measurement, and the most valuable thing in this file: the same room at
- * two cell sizes, four times apart, over the rays that meet their wall squarely
- * enough that every bound is a fixed number of cells. With the geometry held
- * still and only the cells changing, a disagreement that is the cell size has
- * to grow with the cells, and one that is anything else has no reason to.
- */
 TEST_P(ReferenceAgreement, TheDisagreementScalesWithTheCellSize)
 {
   const std::shared_ptr<const OccupancyGridMap> fine =
@@ -644,18 +528,11 @@ TEST_P(ReferenceAgreement, TheDisagreementScalesWithTheCellSize)
     << " cells where its geometry allows "
     << at_coarse.tightest.bound / coarse->resolution();
 
-  /* The coarse grid's cells are four times the fine grid's, and every bound
-   * here is a number of cells, so the whole of the coarse grid's disagreement
-   * is allowed to be four times the fine grid's. It must at least be larger
-   * than everything the fine grid was allowed. */
   EXPECT_GT(at_coarse.largest.difference, at_fine.tightest.bound)
     << "the coarse grid disagrees by " << at_coarse.largest.difference
     << " m, which the fine grid was allowed to as well: the bound is not "
        "tracking the cell size at all";
 
-  /* Four times the cells. Asking for at least twice the disagreement is half of
-   * what the geometry says, and the slack is there because which particular ray
-   * happens to be worst is not something geometry settles. */
   const double cell_ratio = coarse->resolution() / fine->resolution();
 
   EXPECT_GT(at_coarse.largest.difference, 0.5 * cell_ratio * at_fine.largest.difference)
@@ -670,14 +547,6 @@ TEST_P(ReferenceAgreement, TheDisagreementScalesWithTheCellSize)
     << 2.0 * cell_ratio << ", so something other than the cells is growing";
 }
 
-/*
- * The other question the handle answers. `Utils::isPositionInMap` asks the ring
- * whether a point is inside the polygon and asks the grid whether it stands on
- * a free cell, and because no cell of this grid straddles a wall the two are
- * the same question with the same answer. Asserted with no tolerance at all,
- * over a lattice that steps by a third of a cell so that it lands on no cell
- * boundary and no wall.
- */
 TEST_P(ReferenceAgreement, TheTwoReferencesAgreeOnWhatIsFreeSpace)
 {
   const std::shared_ptr<const OccupancyGridMap> map =
@@ -712,8 +581,6 @@ TEST_P(ReferenceAgreement, TheTwoReferencesAgreeOnWhatIsFreeSpace)
     }
   }
 
-  /* A lattice that found nothing free, or found everything free, would agree
-   * with itself and prove nothing. */
   EXPECT_GT(inside, 0U);
   EXPECT_LT(inside, probed);
 }

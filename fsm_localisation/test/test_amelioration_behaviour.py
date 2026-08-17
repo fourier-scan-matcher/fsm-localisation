@@ -238,12 +238,6 @@ class TestAmeliorationBehaviour(unittest.TestCase):
         self.assertAlmostEqual(published.angle_min, -math.pi, places=6)
         self.assertAlmostEqual(published.range_max, 100.0, places=6)
 
-    # ------------------------------------------------------------------
-    # Refusals. Each one must leave the node alive and able to serve the next
-    # estimate, and the correct-once service must give the same reason the log
-    # gives, which is what makes the response worth reading.
-    # ------------------------------------------------------------------
-
     def test_an_estimate_outside_the_map_is_refused(self):
         self.harness.call('start')
         self.harness.publish_scan(FIRST)

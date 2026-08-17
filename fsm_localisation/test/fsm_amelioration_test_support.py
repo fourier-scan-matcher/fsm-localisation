@@ -46,18 +46,12 @@ ROOM_WIDTH = 8.0
 ROOM_HEIGHT = 5.0
 RESOLUTION = 0.05
 
-# The grid is one cell larger than the room on every side, and that ring is
-# blocked. Its inner face therefore lies exactly on the room's wall.
 GRID_WIDTH = int(round(ROOM_WIDTH / RESOLUTION)) + 2
 GRID_HEIGHT = int(round(ROOM_HEIGHT / RESOLUTION)) + 2
 GRID_ORIGIN = (-RESOLUTION, -RESOLUTION)
 
-# Where the laser sits on the robot. Off the robot's centre and turned, so a
-# test cannot pass by treating the two as the same pose.
 SENSOR_ON_ROBOT = (0.20, 0.05, 0.10)
 
-# Where the robot really is. Off both centre lines of the room and off both
-# diagonals.
 TRUE_ROBOT_POSE = (3.10, 2.30, 0.35)
 
 ROBOT_FRAME = 'base_footprint'
@@ -138,8 +132,6 @@ def build_estimate(stamp, pose, frame_id=GLOBAL_FRAME):
     message.pose.pose.orientation.z = math.sin(pose[2] / 2.0)
     message.pose.pose.orientation.w = math.cos(pose[2] / 2.0)
 
-    # A covariance nobody would produce by accident, so a test can tell it was
-    # copied through rather than defaulted.
     message.pose.covariance = [0.0] * 36
     message.pose.covariance[0] = 0.25
     message.pose.covariance[7] = 0.36
@@ -193,9 +185,6 @@ class AmeliorationHarness(Node):
         self.estimate_publisher = self.create_publisher(
             PoseWithCovarianceStamped, '/amcl_pose', 1)
 
-        # The sensor's placement goes out on the static topic, which is latched,
-        # so it is there for the node whenever it looks and at whatever time it
-        # asks about.
         static = QoSProfile(depth=1)
         static.reliability = ReliabilityPolicy.RELIABLE
         static.durability = DurabilityPolicy.TRANSIENT_LOCAL

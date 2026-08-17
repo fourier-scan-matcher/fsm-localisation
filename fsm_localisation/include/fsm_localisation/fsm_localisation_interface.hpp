@@ -17,6 +17,7 @@
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
+
 #ifndef FSM_LOCALISATION__FSM_LOCALISATION_INTERFACE_HPP_
 #define FSM_LOCALISATION__FSM_LOCALISATION_INTERFACE_HPP_
 
@@ -45,10 +46,8 @@
 
 namespace fsm_localisation
 {
-
 /**
  * @brief Which of the two things this node does.
- *
  * One node, two modes, chosen once at start-up and never afterwards. Only the
  * topics, services and state the chosen mode uses are created, so what the node
  * offers is exactly what the mode means and nothing from the other one is
@@ -56,17 +55,15 @@ namespace fsm_localisation
  */
 enum class Mode
 {
-  /** Correct an incoming pose estimate against a map. */
   amelioration,
 
-  /** Report how far the sensor moved between one scan and the next. */
   odometry
 };
 
 /**
  * @brief Parse a mode's name.
  * @return the matching enumerator, or `std::nullopt` when `name` is neither
- *         `"odometry"` nor `"amelioration"`.
+ * `"odometry"` nor `"amelioration"`.
  */
 std::optional<Mode> modeFromName(const std::string& name);
 
@@ -77,7 +74,6 @@ std::string_view nameOfMode(const Mode mode);
 
 /**
  * @brief Everything about this node that is a ROS concern.
- *
  * Owns the parameters, the topics, the services and the transform broadcast,
  * and delegates every computation to Matcher or to Corrector.
  */
@@ -98,9 +94,9 @@ private:
   /**
    * @brief One correction, from the estimate given and whatever else is held.
    * @return an empty string when a correction was published, otherwise a
-   *         sentence saying why none was. The same route serves the estimate
-   *         subscription and the correct-once service, so the two cannot
-   *         disagree about what a correction is.
+   * sentence saying why none was. The same route serves the estimate
+   * subscription and the correct-once service, so the two cannot
+   * disagree about what a correction is.
    */
   std::string correctFrom(
     const geometry_msgs::msg::PoseWithCovarianceStamped& estimate);
@@ -150,7 +146,6 @@ private:
 
   Mode mode_{Mode::odometry};
 
-  /* Shared by both modes. */
   rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_subscription_;
 
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr start_service_;
@@ -165,7 +160,6 @@ private:
 
   bool locked_{true};
 
-  /* The odometry mode's own. */
   std::unique_ptr<Matcher> matcher_;
 
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr odometry_publisher_;
@@ -182,7 +176,6 @@ private:
 
   rclcpp::Time previous_stamp_{0, 0, RCL_ROS_TIME};
 
-  /* The amelioration mode's own. */
   rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_subscription_;
   rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr
     estimate_subscription_;
@@ -210,14 +203,6 @@ private:
 
   rclcpp::Time previous_estimate_stamp_{0, 0, RCL_ROS_TIME};
 
-  /*
-   * The map and the newest scan are written by their own subscriptions and read
-   * by a correction, and a correction can also be driven from the service
-   * group, which is reentrant. Both are handed over as shared pointers and both
-   * are taken by copy at the top of a correction, so a map replaced while a
-   * correction is running does not disturb the correction, which finishes
-   * against the map it started with.
-   */
   mutable std::mutex held_mutex_;
   std::shared_ptr<const Corrector> corrector_;
   std::shared_ptr<const OccupancyGridMap> map_;
@@ -225,6 +210,6 @@ private:
   sensor_msgs::msg::LaserScan::ConstSharedPtr latest_scan_;
 };
 
-}  // namespace fsm_localisation
+}
 
-#endif  // FSM_LOCALISATION__FSM_LOCALISATION_INTERFACE_HPP_
+#endif

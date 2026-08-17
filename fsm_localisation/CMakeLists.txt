@@ -9,39 +9,15 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# ------------------------------------------------------------------------------
-# FSM_LOCALISATION_EXACT_FP=ON replaces -Ofast with optimisation settings that forbid the
-# compiler from reassociating floating point arithmetic or contracting
-# multiply-adds. Two compilers reassociate differently, so a reference build and
-# a build under test only produce comparable numbers when this is on.
-#
-# FSM_LOCALISATION_DETERMINISTIC_FFT=ON makes FFTW select its plan by heuristic rather
-# than by timing itself. Plan choice affects rounding, so without this the same
-# binary can produce different numbers on two consecutive runs.
-#
-# Both default to OFF, which is the configuration this package ships with. The
-# tests below force both ON regardless, since their tolerances are meaningless
-# otherwise.
-# ------------------------------------------------------------------------------
 option(FSM_LOCALISATION_EXACT_FP "Forbid floating point reassociation and contraction" OFF)
 option(FSM_LOCALISATION_DETERMINISTIC_FFT "Select FFTW plans by heuristic, not by timing" OFF)
 
 if(FSM_LOCALISATION_EXACT_FP)
   add_compile_options(-O2 -fno-fast-math -ffp-contract=off)
 else()
-  # -Ofast turns on -ffast-math, which turns on -ffinite-math-only. That sub
-  # flag lets the compiler assume no infinity or not-a-number value ever
-  # occurs, which folds a check written to catch one into a no-op and can
-  # make an equality comparison against a literal report true for a value
-  # that is not a number. Disabling it costs a parity check on the rare
-  # double equality comparison this package's hot loops make, and keeps
-  # every other relaxation -Ofast brings: the higher optimisation level,
-  # reassociation, reciprocal approximations, signed zero and trapping
-  # assumptions, and flush to zero.
   add_compile_options(-Ofast -fno-finite-math-only)
 endif()
 
-# ------------------------------------------------------------------------------
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
@@ -57,9 +33,6 @@ find_package(CGAL REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FFTW3 REQUIRED IMPORTED_TARGET fftw3)
 
-# ------------------------------------------------------------------------------
-# The core: the matcher and the odometry state it drives. No ROS anywhere in
-# here, so it can be tested without a ROS installation present.
 add_library(fsm_localisation_core SHARED
   src/fsm_localisation/fsm_localisation.cpp)
 
@@ -76,11 +49,6 @@ if(FSM_LOCALISATION_DETERMINISTIC_FFT)
   target_compile_definitions(fsm_localisation_core PUBLIC FSM_LOCALISATION_FFTW_ESTIMATE)
 endif()
 
-# ------------------------------------------------------------------------------
-# The occupancy grid type. It is ROS-aware in exactly one respect, the message
-# it is built from, so it links nav_msgs on top of the core rather than the
-# core linking it: nothing that only wants the matcher pays for a ROS message
-# it does not use.
 add_library(fsm_localisation_grid SHARED
   src/fsm_localisation/occupancy_grid_map.cpp)
 
@@ -88,8 +56,6 @@ target_link_libraries(fsm_localisation_grid PUBLIC
   fsm_localisation_core
   ${nav_msgs_TARGETS})
 
-# ------------------------------------------------------------------------------
-# The ROS interface, and the executable that runs it.
 add_library(fsm_localisation_interface SHARED
   src/fsm_localisation/fsm_localisation_interface.cpp)
 
@@ -110,24 +76,12 @@ add_executable(fsm_localisation_interface_node
 
 target_link_libraries(fsm_localisation_interface_node fsm_localisation_interface)
 
-# ------------------------------------------------------------------------------
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
 
-  # The two formatting linters impose a brace and wrapping style that this
-  # package has never used, and the core header is 3800 lines of inherited code
-  # whose arithmetic must not be disturbed. Reformatting it to satisfy a linter
-  # would be the single riskiest change in the package for no behavioural gain.
-  # Everything that checks something other than formatting stays on.
   set(ament_cmake_uncrustify_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)
 
-  # range_libc is borrowed, not ours: it carries its own upstream copyright
-  # headers rather than this package's, and its known defects and inherited
-  # style are corrected or left alone on a separate, deliberate schedule, not
-  # by a linter's opinion. The copyright and cppcheck checks both read this one
-  # variable when ament_lint_auto wires them up, so setting it once here is
-  # enough to keep borrowed code out of both.
   set(AMENT_LINT_AUTO_FILE_EXCLUDE
     ${CMAKE_CURRENT_SOURCE_DIR}/include/${PROJECT_NAME}/range_libc/*)
 
@@ -135,27 +89,6 @@ if(BUILD_TESTING)
 
   find_package(ament_cmake_gtest REQUIRED)
 
-  # The tests assert agreement to 1e-9 and tighter. Under fast arithmetic the
-  # compiler is free to reassociate, which moves results well past that, so a
-  # passing test would say nothing. Force the exact configuration here whatever
-  # the library itself was configured with.
-  #
-  # That forcing is why the suites below compile the core and the grid into
-  # themselves through these two object libraries rather than linking
-  # fsm_localisation_core and fsm_localisation_grid. Nearly everything the core
-  # is lives in a header, as functions the compiler is free to emit into every
-  # translation unit that uses them, and two copies compiled under different
-  # arithmetic settings are two different functions wearing one name. A test
-  # that both compiled the header under exact settings and linked a library
-  # built under the shipped ones therefore held two definitions of each, and
-  # which one every call reached was decided by the order the linker happened to
-  # see them: a test could assert a tolerance it was not in fact measuring, and
-  # the library's own internal calls could be answered by the test's copies.
-  # Compiled in here instead, every definition in a test binary comes from one
-  # configuration, which is the configuration the test asked for.
-  #
-  # One object library per source file rather than one per suite, so the choice
-  # of plan flag is made once and cannot differ between the two.
   add_library(fsm_localisation_core_exact OBJECT
     src/fsm_localisation/fsm_localisation.cpp)
 
@@ -180,18 +113,12 @@ if(BUILD_TESTING)
     fsm_localisation_core_exact
     ${nav_msgs_TARGETS})
 
-  # One source file, one test. The dimensions case used to have to read values
-  # nothing had ever written, and what that reported was not stable enough to
-  # trust in the same process as the other three; the constructor that read
-  # them is gone, and with it the reason the two were ever split.
   ament_add_gtest(test_fsm_localisation_cbgl_defects
     test/test_cbgl_defects.cpp)
 
   ament_add_gtest(test_fsm_localisation_core
     test/test_defects_core.cpp)
 
-  # A regression in the recovery refusal is a hang rather than a wrong answer,
-  # so this target is bounded on wall clock time as the liveness one is.
   ament_add_gtest(test_fsm_localisation_corrector
     test/test_corrector.cpp
     TIMEOUT 120)
@@ -202,34 +129,6 @@ if(BUILD_TESTING)
   ament_add_gtest(test_fsm_localisation_dft
     test/test_dft.cpp)
 
-  # The one target in this package compiled the way the package ships. The
-  # matcher core is a header, so a test that calls it directly recompiles it at
-  # the test's own settings whatever the test links; every other gtest target
-  # below forces the exact floating point configuration, so no line of the core
-  # is ever exercised as it ships. This one covers the guards that keep a value
-  # which is not a number out of the matcher, which are exactly the code whose
-  # behaviour depends on the arithmetic it is compiled with.
-  #
-  # It is deliberately excluded from both foreach loops below, is not linked
-  # against fsm_localisation_core so that its own compile flags rather than the
-  # library's govern the code that runs, and pins its arithmetic on the target
-  # rather than inheriting it from directory scope. Three things make the pin
-  # fussier than it looks, and getting any of them wrong yields a target that
-  # reads as pinned and is not:
-  #
-  #   * FSM_LOCALISATION_EXACT_FP=ON rewrites directory scope to -fno-fast-math
-  #     and -ffp-contract=off, and directory options precede target options on
-  #     the command line, so both have to be restated to be undone.
-  #   * gcc applies the flags implied by an -O level before it applies any
-  #     explicit flag, so a later -Ofast on its own does not undo an earlier
-  #     explicit -fno-fast-math. -ffast-math has to be named outright.
-  #   * cmake de-duplicates compile options, so a flag restated here that also
-  #     appears at directory scope is dropped from this list rather than moved
-  #     to the end of it. That silently reorders the rest, and -ffast-math
-  #     landing after -fno-finite-math-only turns finite math back on. The
-  #     SHELL: prefix is what keeps the four flags together and in order.
-  #
-  # The file fails to compile if this is ever weakened.
   ament_add_gtest(test_fsm_localisation_finite_guard
     test/test_finite_guard.cpp)
   target_include_directories(test_fsm_localisation_finite_guard PRIVATE
@@ -249,8 +148,6 @@ if(BUILD_TESTING)
   ament_add_gtest(test_fsm_localisation_invalid_ranges
     test/test_invalid_ranges.cpp)
 
-  # A regression here is a hang, not a wrong answer, so the bound is on wall
-  # clock time rather than on trust that the two loops under test stay bounded.
   ament_add_gtest(test_fsm_localisation_liveness_guards
     test/test_liveness_guards.cpp
     TIMEOUT 10)
@@ -258,13 +155,6 @@ if(BUILD_TESTING)
   ament_add_gtest(test_fsm_localisation_occupancy_grid_map
     test/test_occupancy_grid_map.cpp)
 
-  # The refusals the node makes before any message arrives, exercised by
-  # constructing the node rather than by launching it. It links the interface
-  # and takes no arithmetic settings of its own: what it asserts is which
-  # configurations start and which do not, and none of that turns on a
-  # floating point result.
-  #
-  # It carries a domain of its own for the reason the launch tests below do.
   ament_add_gtest(test_fsm_localisation_node_params
     test/test_node_params.cpp
     ENV ROS_DOMAIN_ID=71)
@@ -294,22 +184,6 @@ if(BUILD_TESTING)
 
   find_package(launch_testing_ament_cmake REQUIRED)
 
-  # The launch runner imports a test file directly rather than through pytest,
-  # so the directory holding the shared helpers has to be on the import path
-  # for it. Setting it here keeps the test files free of path manipulation.
-  #
-  # Every file below starts a node of its own, and they all use the same node
-  # names and the same topic names. Left in one DDS domain they hear each other:
-  # a case asserting that its node has published nothing yet sees what another
-  # file's started node published, and twenty four of the thirty one cases in
-  # this package failed that way whenever the suite was run in parallel. A
-  # domain per file, and one for the gtest that constructs a node, is what keeps
-  # each test hearing only itself. The numbers are arbitrary and only have to
-  # differ; anything from 0 to 101 is valid on this middleware, and a domain in
-  # use outside the tests is a reason to move them rather than to widen them.
-  #
-  # The startup contract needs a node nothing has touched, so it launches its
-  # own rather than sharing the one the behaviour tests drive.
   add_launch_test(test/test_node_startup.py TIMEOUT 300
     ENV ROS_DOMAIN_ID=72
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
@@ -317,38 +191,22 @@ if(BUILD_TESTING)
     ENV ROS_DOMAIN_ID=73
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
 
-  # The initial pose cases launch their own node for a different reason: the
-  # service they drive holds the node until a message arrives on the initial
-  # pose topic, which is not a state to hand on to a case expecting an
-  # answer.
   add_launch_test(test/test_initial_pose.py TIMEOUT 300
     ENV ROS_DOMAIN_ID=74
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
 
-  # The correcting mode, driven through a running node: what it recovers and
-  # what it refuses. Each case waits on a correction rather than on a clock, so
-  # the budget is for the whole file rather than for any one of them.
   add_launch_test(test/test_amelioration_behaviour.py TIMEOUT 600
     ENV ROS_DOMAIN_ID=75
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
 
-  # A node that has never been given a map, and one that has never been given a
-  # scan. Neither state can be recovered once one has arrived, so these cases
-  # need a node of their own rather than a share of the one above.
   add_launch_test(test/test_amelioration_startup.py TIMEOUT 300
     ENV ROS_DOMAIN_ID=76
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
 
-  # Both modes at once, which is the arrangement that would show a collision
-  # between them. Nothing is driven; what is asserted is the surface each
-  # presents, which is settled entirely at construction.
   add_launch_test(test/test_mode_switch.py TIMEOUT 300
     ENV ROS_DOMAIN_ID=77
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
 
-  # Six misconfigured nodes, each dying on its own and saying which setting
-  # killed it. What the class refuses is asserted in a gtest; what an operator
-  # sees when it does is asserted here, by running the programme.
   add_launch_test(test/test_refuses_to_start.py TIMEOUT 300
     ENV ROS_DOMAIN_ID=78
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
@@ -369,17 +227,6 @@ if(BUILD_TESTING)
     endif()
   endforeach()
 
-  # The four suites that need the grid as well as the core, since what they
-  # exercise is the type that reads an occupancy grid message. Both object
-  # libraries are named rather than relying on the grid one carrying the core:
-  # cmake adds an object library's own object files to whatever links it
-  # directly and does not pass them on a second time, so a suite naming the grid
-  # alone gets the grid's objects and none of the core's.
-  #
-  # Unlike the other three, the corrector suite runs the matcher and so reaches
-  # the transform. Plans there are selected by heuristic rather than by timing,
-  # so a correction repeated in a later process gives the answer this one
-  # recorded.
   foreach(test_target test_fsm_localisation_corrector
                       test_fsm_localisation_occupancy_grid_map
                       test_fsm_localisation_ray_casting
@@ -392,13 +239,6 @@ if(BUILD_TESTING)
   endforeach()
 endif()
 
-# ------------------------------------------------------------------------------
-# The three libraries go into an export set rather than being installed loose,
-# so that a consumer's find_package(fsm_localisation) yields imported targets
-# carrying this package's include directories and its link dependencies.
-# Announcing include directories and library names alone, as this file did,
-# leaves a consumer to rediscover Eigen, CGAL and FFTW3 for itself and to guess
-# the link order, which is the same as announcing nothing usable.
 install(TARGETS
   fsm_localisation_core
   fsm_localisation_grid
@@ -420,10 +260,6 @@ install(DIRECTORY launch config
 
 ament_export_targets(export_fsm_localisation HAS_LIBRARY_TARGET)
 
-# What the three libraries expose in their own headers, and therefore what a
-# consumer has to have found before it can compile against them. FFTW3 is the
-# exception: it has no CMake package to find, so the extras file below builds
-# its imported target the same way this file does.
 ament_export_dependencies(
   rclcpp
   sensor_msgs

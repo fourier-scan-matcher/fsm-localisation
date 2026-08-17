@@ -20,8 +20,7 @@
 
 /**
  * @brief `FSM::Reference`, the handle every odometry call site was widened to
- *        carry so that the ring path could stay untouched.
- *
+ * carry so that the ring path could stay untouched.
  * @details
  * Nothing else in this package tests the handle directly. The claim that
  * threading it through ten call sites left the odometry path unchanged rests
@@ -42,12 +41,6 @@
 
 namespace
 {
-
-/*
- * The smallest `FSM::GridReference` that satisfies the interface: `isFree`
- * always answers the same way and `ranges` is never called by anything below,
- * since `FSM::Reference` never reaches into what it holds on its own.
- */
 class StubGrid : public FSM::GridReference
 {
  public:
@@ -64,7 +57,7 @@ class StubGrid : public FSM::GridReference
   }
 };
 
-}  // namespace
+}
 
 TEST(ReferenceHandle, IsTriviallyCopyable)
 {

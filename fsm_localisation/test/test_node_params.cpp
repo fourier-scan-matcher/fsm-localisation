@@ -20,14 +20,12 @@
 
 /**
  * @brief What the node refuses to start with, and what it starts with anyway.
- *
  * @details
  * The refusals that can be decided before any message arrives are decided in
  * the constructor, so the node either comes up usable or does not come up. This
  * file constructs the node directly with parameter overrides rather than
  * launching it, which is what makes each case one line of setup and its
  * outcome a thrown exception rather than a log line somebody has to read.
- *
  * **The load bearing property here is that only the running mode's settings are
  * read.** One configuration file is meant to serve both modes, so it will
  * always carry settings for the mode that is not running, and those must not be
@@ -47,12 +45,8 @@
 
 namespace
 {
-
 using fsm_localisation::Interface;
 
-/*******************************************************************************
- * A node built from the defaults with `overrides` applied on top.
- */
 rclcpp::NodeOptions optionsWith(
   const std::vector<rclcpp::Parameter>& overrides)
 {
@@ -61,8 +55,6 @@ rclcpp::NodeOptions optionsWith(
   return options;
 }
 
-/*******************************************************************************
-*/
 rclcpp::NodeOptions inOdometryModeWith(
   const std::vector<rclcpp::Parameter>& overrides)
 {
@@ -71,8 +63,6 @@ rclcpp::NodeOptions inOdometryModeWith(
   return optionsWith(all);
 }
 
-/*******************************************************************************
-*/
 rclcpp::NodeOptions inAmeliorationModeWith(
   const std::vector<rclcpp::Parameter>& overrides)
 {
@@ -81,19 +71,13 @@ rclcpp::NodeOptions inAmeliorationModeWith(
   return optionsWith(all);
 }
 
-}  // namespace
+}
 
-/*******************************************************************************
- * There is no default mode, because a node that does not know which of the two
- * things it does has nothing sensible to fall back on.
- */
 TEST(NodeParameters, AnAbsentModeIsRefused)
 {
   EXPECT_THROW(Interface{optionsWith({})}, std::invalid_argument);
 }
 
-/*******************************************************************************
-*/
 TEST(NodeParameters, AnUnrecognisedModeIsRefused)
 {
   EXPECT_THROW(
@@ -101,18 +85,12 @@ TEST(NodeParameters, AnUnrecognisedModeIsRefused)
     std::invalid_argument);
 }
 
-/*******************************************************************************
-*/
 TEST(NodeParameters, EitherModeStartsFromItsDefaults)
 {
   EXPECT_NO_THROW(Interface{inOdometryModeWith({})});
   EXPECT_NO_THROW(Interface{inAmeliorationModeWith({})});
 }
 
-/*******************************************************************************
- * The property one configuration file for two modes rests on, in both
- * directions.
- */
 TEST(NodeParameters, TheIdleModesSettingsCannotStopTheNode)
 {
   EXPECT_NO_THROW(Interface{inOdometryModeWith({
@@ -128,8 +106,6 @@ TEST(NodeParameters, TheIdleModesSettingsCannotStopTheNode)
         rclcpp::Parameter("initial_pose_topic", "")})});
 }
 
-/*******************************************************************************
-*/
 TEST(NodeParameters, AnOccupancyThresholdOutsideAPercentageIsRefused)
 {
   EXPECT_THROW(
@@ -143,8 +119,6 @@ TEST(NodeParameters, AnOccupancyThresholdOutsideAPercentageIsRefused)
     std::invalid_argument);
 }
 
-/*******************************************************************************
-*/
 TEST(NodeParameters, AnUnrecognisedCastingMethodIsRefused)
 {
   EXPECT_THROW(
@@ -153,10 +127,6 @@ TEST(NodeParameters, AnUnrecognisedCastingMethodIsRefused)
     std::invalid_argument);
 }
 
-/*******************************************************************************
- * A negative wait is not a shorter wait, and a wait that is not a number is
- * neither negative nor positive, so it is screened before the sign is.
- */
 TEST(NodeParameters, ANegativeTransformTimeoutIsRefused)
 {
   EXPECT_THROW(
@@ -169,8 +139,6 @@ TEST(NodeParameters, ANegativeTransformTimeoutIsRefused)
         rclcpp::Parameter("tf_lookup_timeout", 0.0)})});
 }
 
-/*******************************************************************************
-*/
 TEST(NodeParameters, AnEmptyRequiredTopicIsRefused)
 {
   EXPECT_THROW(
@@ -187,10 +155,6 @@ TEST(NodeParameters, AnEmptyRequiredTopicIsRefused)
     std::invalid_argument);
 }
 
-/*******************************************************************************
- * The one topic that is allowed to be empty, because empty is how the thing it
- * names is turned off.
- */
 TEST(NodeParameters, AnEmptyMapScanTopicMeansNoMapScan)
 {
   EXPECT_NO_THROW(
@@ -198,11 +162,6 @@ TEST(NodeParameters, AnEmptyMapScanTopicMeansNoMapScan)
         rclcpp::Parameter("map_scan_topic", "")})});
 }
 
-/*******************************************************************************
- * A leading slash on a frame name is refused here rather than surfacing later
- * from inside a transform lookup as a complaint about a frame that does not
- * exist.
- */
 TEST(NodeParameters, AFrameNameBeginningWithASlashIsRefused)
 {
   EXPECT_THROW(
@@ -216,10 +175,6 @@ TEST(NodeParameters, AFrameNameBeginningWithASlashIsRefused)
     std::invalid_argument);
 }
 
-/*******************************************************************************
- * Everything the odometry package already refused is still refused, in both
- * modes, since those settings belong to the matcher and both modes drive it.
- */
 TEST(NodeParameters, TheMatchersOwnRefusalsStillHoldInBothModes)
 {
   EXPECT_THROW(
@@ -235,8 +190,6 @@ TEST(NodeParameters, TheMatchersOwnRefusalsStillHoldInBothModes)
     std::invalid_argument);
 }
 
-/*******************************************************************************
-*/
 int main(int argc, char** argv)
 {
   testing::InitGoogleTest(&argc, argv);

@@ -20,9 +20,8 @@
 
 /**
  * @brief The guards that keep a value which is not a number out of the
- *        matcher, exercised at the arithmetic settings this package ships
- *        with rather than at the stricter ones every other suite forces.
- *
+ * matcher, exercised at the arithmetic settings this package ships
+ * with rather than at the stricter ones every other suite forces.
  * @details
  * The matcher core is a header, and every function in it is inline. Code a
  * test calls directly is therefore recompiled into that test at the test's
@@ -33,7 +32,6 @@
  * suite asserting agreement to 1e-9, and the wrong one for a guard, because
  * a guard's whole job is to survive the optimiser the package actually
  * ships.
- *
  * This file exists to close that gap, and nothing else. It is not linked
  * against fsm_localisation_core, so no part of it reaches the core through a
  * compiled symbol, and its build pins `-Ofast -ffast-math
@@ -45,7 +43,6 @@
  * the same safe build, and the one file written to defeat the optimiser
  * would stop meeting it. The two preprocessor checks below fail the build
  * rather than let that happen quietly.
- *
  * `-Ofast` implies `-ffast-math`, which implies `-ffinite-math-only`, under
  * which the compiler may assume no infinity and no not-a-number value ever
  * occurs. That assumption erases a guard written as a call to std::isfinite
@@ -54,7 +51,6 @@
  * `-ffinite-math-only` back off, and the guards read the exponent bits
  * directly instead of asking the standard library. Each case below protects
  * one of those two answers, and each is meaningless anywhere but here.
- *
  * Results are read back as bit patterns, never as doubles. A comparison
  * written in the same translation unit as the value under test is subject to
  * the same licences the value is, so a plain `== 0.0` cannot be trusted to
@@ -87,7 +83,6 @@
 
 namespace
 {
-
 constexpr std::uint64_t exponent_all_ones = (1ULL << 11) - 1;
 constexpr std::uint64_t exponent_shift = 52;
 constexpr std::uint64_t sign_shift = 63;
@@ -125,11 +120,6 @@ std::uint64_t exponentOf(const double value)
   return (bitsOf(value) >> exponent_shift) & exponent_all_ones;
 }
 
-/* A double assembled at run time from its bits, laundered through a volatile
- * so the optimiser cannot carry what it knows about the pattern into the
- * call. Naming the value with std::numeric_limits instead would hand the
- * compiler a constant it is entitled, at these settings, to reason about as
- * one that never occurs. */
 double opaqueDoubleFromBits(const std::uint64_t bits)
 {
   volatile std::uint64_t sink = bits;
@@ -139,25 +129,8 @@ double opaqueDoubleFromBits(const std::uint64_t bits)
 
 class FinitePredicate : public testing::TestWithParam<FinitePattern> {};
 
-}  // namespace
+}
 
-/*
- * Protects the predicate every other guard in the core is built on.
- * DFTUtils::isFinite reads the exponent field rather than calling
- * std::isfinite, for the reason isValidRange in fsm_localisation.cpp sets out
- * first: the standard call is folded to a constant true under the arithmetic
- * this package ships, and a guard that always says yes is worse than no guard
- * at all, because it looks like one. Reading eleven bits out of an integer is
- * not arithmetic and cannot be assumed away, but nothing except running the
- * function at the shipping settings can show that. Every other suite in this
- * package recompiles this same function under settings that would keep even
- * the std::isfinite version honest, so none of them can tell the two apart.
- *
- * Both non finite encodings are covered on each side of the sign, along with
- * the two ends of the finite range and the quiet and signalling not-a-number
- * payloads, since the check is on the exponent alone and must not read the
- * mantissa.
- */
 TEST_P(FinitePredicate, ReadsTheExponentRatherThanAskingTheStandardLibrary)
 {
   const FinitePattern pattern = GetParam();
@@ -186,21 +159,6 @@ INSTANTIATE_TEST_SUITE_P(
     return std::to_string(info.index);
   });
 
-/*
- * Protects the finite check in the plan free overload of
- * getFirstDFTCoefficient, the one the rotation stage reaches through
- * DFTUtils::dft when no cached plan is handed down. A discrete Fourier
- * transform is a linear combination of every sample, so a single ray that is
- * not a number makes every coefficient of the transform not a number too, and
- * the first coefficient is what the correction vector is built from. Left
- * unreplaced it moves the pose by an amount that is not a number, and the
- * pose never recovers.
- *
- * This has to run at the shipping settings to mean anything. Under the exact
- * settings the rest of the suite forces, a guard written as std::isfinite
- * would pass this case as readily as the bit reading one does, so a green
- * result there says nothing about the binary that ships.
- */
 TEST(FiniteGuard, ANonFiniteCoefficientIsZeroedWithoutACachedPlan)
 {
   const std::size_t size = 64;
@@ -220,14 +178,6 @@ TEST(FiniteGuard, ANonFiniteCoefficientIsZeroedWithoutACachedPlan)
        "zero; its bits were " << bitsOf(coefficient[1]);
 }
 
-/*
- * Protects the finite check in the overload that takes a caller supplied
- * plan. It is a second, separate copy of the same four lines, and it is the
- * copy the translation stage runs on every iteration of every match, so a
- * correction applied to one overload alone would leave the hot path
- * unguarded. Two cases rather than one because a shared guard is not what the
- * header has.
- */
 TEST(FiniteGuard, ANonFiniteCoefficientIsZeroedWithACachedPlan)
 {
   const std::size_t size = 64;
@@ -249,17 +199,6 @@ TEST(FiniteGuard, ANonFiniteCoefficientIsZeroedWithACachedPlan)
        "zero; its bits were " << bitsOf(coefficient[1]);
 }
 
-/*
- * The other side of both guards, and the reason neither of the two cases
- * above can be satisfied by a stage that returns zero whatever it is handed.
- * A single period of a cosine, given a phase so that neither part of the
- * first coefficient lands on zero honestly, must come back through both
- * overloads with both parts left alone. No tolerance is stated and none is
- * needed: what is asserted is that the replacement did not fire, not what the
- * transform computed, which is what the suites built at the exact settings
- * are for. At these settings a value is free to differ in its last places and
- * the assertion still holds.
- */
 TEST(FiniteGuard, AFiniteCoefficientIsLeftAloneByBothOverloads)
 {
   const std::size_t size = 64;
@@ -294,25 +233,6 @@ TEST(FiniteGuard, AFiniteCoefficientIsLeftAloneByBothOverloads)
        "finite imaginary part must survive both identically";
 }
 
-/*
- * Protects the separation between the translation stage's criterion and its
- * report that a pose left the map. The stage used to signal a departure only
- * by returning a criterion of exactly -2.0, leaving every caller to compare a
- * double against that literal. At the settings this package ships, what such
- * a comparison reports for a criterion that is not a number is not something
- * a caller can rely on either way, and a caller that read it as a departure
- * would throw away a pose that never left. TranslationOutput now carries
- * out_of_map as a plain boolean, set only where a pose genuinely leaves the
- * map, which removes the comparison rather than hoping it behaves.
- *
- * A criterion that is not a number without a departure is reachable without
- * contrivance. One non finite ray in the scan makes every coefficient of its
- * transform non finite, which the guard above replaces with zero before it
- * can move the pose, but the criterion is an average of the raw per ray
- * differences taken before that replacement, so it stays not a number
- * regardless. The exponent is read rather than the value compared, for the
- * same reason the stage stopped comparing it.
- */
 TEST(FiniteGuard, ANonFiniteCriterionIsNotReadAsAPoseThatLeftTheMap)
 {
   const std::vector<std::pair<double, double>> map{
@@ -337,27 +257,6 @@ TEST(FiniteGuard, ANonFiniteCriterionIsNotReadAsAPoseThatLeftTheMap)
        "criterion against a literal, must say so";
 }
 
-/*
- * Protects the build flag itself. interpolateRanges finds the gaps to fill by
- * comparing each range against the literal zero, which is the second half of
- * the same defect class the checks above answer: `-ffinite-math-only` lets
- * the compiler assume neither side of a floating point equality is ever a
- * value that is not a number, and an equality compiled on that assumption can
- * report true for one. The package answers it by keeping
- * `-fno-finite-math-only` in the shipping build, and this is the only case in
- * either package that would notice if that flag were ever dropped.
- *
- * A range that is not a number does not reach this function on the shipping
- * path, because the entry guard replaces every invalid range with zero first.
- * That is precisely why the case belongs here and not with the scan handling
- * suite: it asks what the arithmetic does if one ever did, and the answer
- * only counts at the settings that ship. Mistaken for a gap, the ray would be
- * quietly overwritten with the average of its neighbours and the scan would
- * look clean while carrying a reading nothing measured.
- *
- * The companion below runs the same scan with a genuine zero in the same slot
- * so the case cannot pass by the function doing nothing at all.
- */
 TEST(FiniteGuard, ANonFiniteRangeIsNotMistakenForAGapToInterpolateOver)
 {
   const double range = 2.0;
@@ -378,12 +277,6 @@ TEST(FiniteGuard, ANonFiniteRangeIsNotMistakenForAGapToInterpolateOver)
   }
 }
 
-/*
- * The discriminating half of the case above: a genuine zero in the same slot
- * of the same scan must be filled with the average of the two neighbours that
- * bracket it, so the case above cannot be satisfied by a function that never
- * interpolates anything.
- */
 TEST(FiniteGuard, AZeroRangeStillMarksAGapToInterpolateOver)
 {
   const double range = 2.0;

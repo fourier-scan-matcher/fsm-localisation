@@ -71,8 +71,6 @@ class TestModeSwitch(unittest.TestCase):
         rclpy.init()
         cls.observer = Node('mode_switch_observer')
 
-        # Discovery is not instant and there is nothing to wait on but the
-        # graph itself, so wait until both nodes are in it.
         import time
         deadline = time.monotonic() + 30.0
         while time.monotonic() < deadline:

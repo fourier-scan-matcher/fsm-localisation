@@ -20,25 +20,20 @@
 
 /**
  * @brief `fsm_localisation::OccupancyGridMap`: what it refuses, what it calls
- *        free, how it converts between the world and its own cells, and where
- *        each of a pose's rays meets it.
- *
+ * free, how it converts between the world and its own cells, and where
+ * each of a pose's rays meets it.
  * @details
  * Every expected value below is computed inside the case it is used in, from
  * the grid's own geometry, and every tolerance is read from the map's own
  * `resolution()`. Nothing here is a number recorded from a previous run, so a
  * case that fails is saying the geometry is wrong rather than that it has
  * changed.
- *
  * Four conventions decide the answers and none of them is obvious.
- *
  * **The ray angle.** Ray `i` of `num_rays` leaves a pose at
- *
  * ```
  * t_ray = i * 2*M_PI / num_rays + pose.t - M_PI
  * t_ray = fmod(t_ray + 5*M_PI, 2*M_PI) - M_PI
  * ```
- *
  * read out of `FSM::X::findExactAngular` in `fsm_core.hpp`, which is the
  * definition of record, and carried in the comment above
  * `FSM::GridReference::ranges` beside the interface this type satisfies. Ray
@@ -50,7 +45,6 @@
  * assert a ray *index* as an integer, with no tolerance to argue about, so that
  * an off by one, a mirrored sign and a half turn each fail rather than quietly
  * rotating every grid match.
- *
  * **The cell layout.** A cell is addressed by column and row, `column` bounded
  * by the width and `row` by the height, and the message's `data` is row major:
  * `data[row * width + column]`. `gridMessage` below is the only place in this
@@ -58,14 +52,12 @@
  * grid cannot catch a transposition, and `ABlockedCellWhoseTransposedCellIsOutsideTheGrid`
  * puts a blocked cell where a transposed read would be out of bounds
  * altogether.
- *
  * **What a range is measured to.** A caster stops at a cell, so the finest
  * answer a grid can give is a cell. Where a case has an analytic answer it is
  * measured from the sensor's position to the *centre* of the first cell the ray
  * enters, which for a sensor standing at a cell centre is a whole number of
  * cells and can be checked by counting. The wall's near face is half a cell
  * nearer than that, which is inside the same one cell bound.
- *
  * **The ray heading CDDT is given.** CDDT rounds a cast heading to one of 720
  * bins, so it carries an error of `range * M_PI / 720` on top of the cell. 720
  * is a multiple of four, so a ray along an axis lands exactly on a bin and that
@@ -88,47 +80,30 @@
 
 namespace
 {
-
 using fsm_localisation::CastingMethod;
 using fsm_localisation::CellCoordinates;
 using fsm_localisation::OccupancyGridMap;
 using fsm_localisation::WorldPoint;
 
-/* An occupancy value at or above the threshold blocks, and so does any
- * negative value. These three are the ones the cases below reach for by name;
- * `OccupancyGridMapThreshold` sweeps the boundary itself. */
 const std::int8_t kBlocked = 100;
 const std::int8_t kFree = 0;
 const std::int8_t kUnknown = -1;
 
 const int kOccupancyThreshold = 50;
 
-/* Non square, and larger in the row direction than the column direction, so
- * that a transposed read is either wrong or out of bounds rather than merely
- * plausible. Five centimetres a cell is the resolution the specification's own
- * worked examples use. */
 const unsigned int kWidth = 61U;
 const unsigned int kHeight = 91U;
 const double kResolution = 0.05;
 
-/* The sensor stands at the centre of this cell in every casting case, so a
- * range in cells is a difference of whole cell indices. */
 const unsigned int kSensorColumn = 30U;
 const unsigned int kSensorRow = 45U;
 
-/* A translation and a rotation that share no factor with anything else here,
- * so that a sign error in either direction of the conversion shows up rather
- * than cancelling. */
 const double kOriginX = -3.2;
 const double kOriginY = 7.4;
 const double kOriginYaw = 0.7;
 
-/* Above the grid's diagonal of `hypot(61, 91) * 0.05` metres, so a ray that
- * meets nothing reports this rather than the diagonal. */
 const double kMaxRange = 10.0;
 
-/* Prime, so it shares no symmetry with a mirrored, half turned or off by one
- * reading of the ray convention. */
 const unsigned int kRayCount = 23U;
 
 struct CellValue
@@ -148,16 +123,6 @@ struct GridGeometry
   double origin_yaw{0.0};
 };
 
-/*
- * The world bearing ray `index` of `num_rays` leaves a pose of heading
- * `pose_t` along.
- *
- * These are the two lines of `FSM::X::findExactAngular`, `fsm_core.hpp:675`
- * and `:676`, written the same way rather than described. They are the
- * definition of record for the convention, and `OccupancyGridMap::ranges`
- * carries its own copy of them; that duplication across a module boundary is
- * what the three convention cases below exist to police.
- */
 double bearingOfRay(
   const unsigned int index, const unsigned int num_rays, const double pose_t)
 {
@@ -166,10 +131,6 @@ double bearingOfRay(
   return t_ray;
 }
 
-/*
- * A rectangle of blocked cells, inclusive at both ends, from which every wall,
- * spike and solid block below is built.
- */
 std::vector<CellValue> blockedRectangle(
   const unsigned int first_column, const unsigned int first_row,
   const unsigned int last_column, const unsigned int last_row)
@@ -182,31 +143,11 @@ std::vector<CellValue> blockedRectangle(
   return cells;
 }
 
-/*
- * A three by three block of cells centred on `(column, row)`.
- *
- * A single cell is too easily missed: a ray aimed at a cell chosen by rounding
- * passes near its centre rather than through it, and a marching caster
- * sampling once a cell can step over the corner it clips. Three cells across
- * cannot be stepped over, and at the reaches used below its angular width is
- * still well inside one ray's spacing, so exactly one ray meets it.
- */
 std::vector<CellValue> blockedSpikeAt(const unsigned int column, const unsigned int row)
 {
   return blockedRectangle(column - 1U, row - 1U, column + 1U, row + 1U);
 }
 
-/*
- * A `nav_msgs::msg::OccupancyGrid` of the given geometry with `blocked` set
- * and every other cell free.
- *
- * This is the only place in the file that computes a cell's index into the
- * message's flat `data`, and the expression is the message's own row major
- * order, `data[row * width + column]`, which is also the order
- * `ranges::OMap`'s three argument constructor reads its flat vector in. Get it
- * wrong here and every case is transposed together, which is why the
- * transposition cases assert against a grid whose width and height differ.
- */
 nav_msgs::msg::OccupancyGrid gridMessage(
   const GridGeometry& geometry, const std::vector<CellValue>& blocked)
 {
@@ -230,24 +171,11 @@ nav_msgs::msg::OccupancyGrid gridMessage(
   return message;
 }
 
-/*
- * The name of a casting method, for the suffix gtest gives each instantiation
- * of a parameterised case, so that a failure names the method rather than an
- * index into a list.
- */
 std::string methodSuffix(const testing::TestParamInfo<CastingMethod>& info)
 {
   return std::string(fsm_localisation::nameOfCastingMethod(info.param));
 }
 
-/*
- * Which ray of `num_rays` cast from a pose of heading `pose_t` leaves along
- * `bearing`.
- *
- * This inverts `bearingOfRay`: dropping the wrap, `bearing = index * 2*M_PI /
- * num_rays + pose_t - M_PI`, so `index = (bearing - pose_t + M_PI) * num_rays
- * / (2*M_PI)`, rounded to the nearest ray and taken modulo the ray count.
- */
 unsigned int rayIndexOfBearing(
   const double bearing, const double pose_t, const unsigned int num_rays)
 {
@@ -258,10 +186,6 @@ unsigned int rayIndexOfBearing(
   return static_cast<unsigned int>(index);
 }
 
-/*
- * The indices of every ray that reported less than `max_range`, which is to
- * say every ray that met something.
- */
 std::vector<unsigned int> shortRays(
   const std::vector<double>& ranges, const double max_range)
 {
@@ -273,22 +197,12 @@ std::vector<unsigned int> shortRays(
   return indices;
 }
 
-/*
- * The tolerance a round trip through `cellFromWorld` and `worldFromCell` is
- * held to, in cells.
- *
- * The world point carries a few units in the last place of its own magnitude,
- * and dividing by the resolution to come back scales that error up by one over
- * the resolution. Sixteen units in the last place is a few times the four
- * operations the round trip performs on each axis.
- */
 double roundTripToleranceInCells(const WorldPoint& point, const double resolution)
 {
   const double magnitude = std::abs(point.x) + std::abs(point.y);
   return 16.0 * std::numeric_limits<double>::epsilon() * magnitude / resolution;
 }
 
-/* ========================================================================== */
 class OccupancyGridMapBadResolution : public testing::TestWithParam<double>
 {
 };
@@ -307,13 +221,8 @@ class OccupancyGridMapThreshold : public testing::TestWithParam<ThresholdCase>
 {
 };
 
-}  // namespace
+}
 
-/*
- * A message that says nothing is wrong with it builds, and the pointer it
- * hands back is a shared pointer to a const object: `build` is the only way to
- * make one, so an owner that is neither shared nor const cannot exist.
- */
 TEST(OccupancyGridMapBuild, AGoodMessageBuildsAMapThatReportsTheGeometryItWasGiven)
 {
   const nav_msgs::msg::OccupancyGrid message = gridMessage(
@@ -352,12 +261,6 @@ TEST(OccupancyGridMapBuild, AGoodMessageBuildsAMapThatReportsTheGeometryItWasGiv
     << "meaningless.";
 }
 
-/*
- * `data` one cell short and one cell long. A buffer whose length disagrees
- * with the declared width and height cannot be read at all without either
- * running off the end or leaving a cell undefined, so it is refused before
- * anything indexes it, and the sentence names the two numbers that disagree.
- */
 TEST(OccupancyGridMapBuild, DataOneCellLongIsRefused)
 {
   nav_msgs::msg::OccupancyGrid message = gridMessage(GridGeometry{}, {});
@@ -418,25 +321,6 @@ TEST(OccupancyGridMapBuild, HeightZeroIsRefused)
     << "is not reported as a zero width. It said: " << built.error();
 }
 
-/*
- * An origin translation that is not finite.
- *
- * Every conversion in the type subtracts the origin, so a NaN in it makes
- * every cell coordinate, every free test and every range NaN, silently: NaN
- * compares false against everything, so `isInside` says no, `ranges` reports
- * the maximum for every ray, and the matcher sees a sensor that can see
- * nothing rather than a map that is broken. `build` carries the check for
- * exactly this reason and it must fire.
- *
- * A guard against a value that is not finite has to be written so that the
- * compiler cannot assume it away. This package has met that before and settled
- * it: `isValidRange` in `fsm_localisation.cpp` reads the exponent bits itself
- * rather than asking `std::isfinite`, and the comment above it says why, which
- * is that the package ships compiled with `-Ofast`, that `-Ofast` implies
- * `-ffinite-math-only`, and that under it the compiler may fold
- * `std::isfinite` to a constant true and leave the guard doing nothing in
- * exactly the build that ships.
- */
 TEST(OccupancyGridMapBuild, OriginTranslationThatIsNotFiniteIsRefused)
 {
   for (const double bad : {std::numeric_limits<double>::quiet_NaN(),
@@ -475,13 +359,6 @@ TEST(OccupancyGridMapBuild, WidthZeroIsRefused)
     << "the refusal must name the field that was wrong. It said: " << built.error();
 }
 
-/*
- * An orientation of all zeros, which is what an uninitialised
- * `geometry_msgs::msg::Quaternion` holds and therefore what a publisher that
- * forgot to set the origin sends. It has no yaw to read: normalising it
- * divides by zero. Refused, because the alternative is a map rotated by
- * whatever the division produced.
- */
 TEST(OccupancyGridMapBuild, ZeroQuaternionIsRefused)
 {
   nav_msgs::msg::OccupancyGrid message = gridMessage(GridGeometry{}, {});
@@ -505,18 +382,6 @@ TEST(OccupancyGridMapBuild, ZeroQuaternionIsRefused)
     << "beside it. It said: " << built.error();
 }
 
-/*
- * A resolution that is not finite and positive.
- *
- * The resolution is a divisor in `cellFromWorld` and a multiplier in
- * `worldFromCell` and in every range, so zero makes a cell infinite, a
- * negative one mirrors the grid, and NaN or infinity poisons everything
- * downstream in the way the origin case above describes. All four are refused.
- *
- * Zero and the negative one are ordinary comparisons and hold whatever the
- * arithmetic settings. The two that are not finite need the guard to survive
- * `-ffinite-math-only`, which the note above the origin case sets out.
- */
 TEST_P(OccupancyGridMapBadResolution, IsRefused)
 {
   nav_msgs::msg::OccupancyGrid message = gridMessage(GridGeometry{}, {});
@@ -542,21 +407,6 @@ INSTANTIATE_TEST_SUITE_P(
     std::numeric_limits<double>::infinity(),
     std::numeric_limits<double>::quiet_NaN()));
 
-/*
- * An axis aligned wall, met along each of the four axes in one cast.
- *
- * Eight rays with a pose heading of `M_PI` put ray zero along positive x, ray
- * two along positive y, ray four along negative x and ray six along negative
- * y, since ray `i` leaves at `i * 2*M_PI/8 + M_PI - M_PI`. Each of the four
- * gaps is a different number of cells, so a mirrored or quarter turned reading
- * of the room fails rather than matching by symmetry.
- *
- * The four rays lie exactly on a bin boundary of CDDT's 720 way heading
- * discretisation, 720 being a multiple of four, so its heading quantisation
- * contributes nothing here and one cell is the whole of the bound for all
- * three methods. The diagonals, where that is not true, are in
- * `test_ray_casting.cpp`.
- */
 TEST_P(OccupancyGridMapCasting, AnAxisAlignedWallGivesTheCellGapTimesTheResolution)
 {
   const unsigned int left_wall = 15U;
@@ -586,9 +436,6 @@ TEST_P(OccupancyGridMapCasting, AnAxisAlignedWallGivesTheCellGapTimesTheResoluti
 
   ASSERT_EQ(ranges.size(), num_rays);
 
-  /* The sensor stands at the centre of its cell and the wall cell it meets is
-   * a whole number of cells away along the axis, so the analytic range is that
-   * count of cells times the resolution. */
   const double expected[4] = {
     (right_wall - kSensorColumn) * map->resolution(),
     (top_wall - kSensorRow) * map->resolution(),
@@ -615,17 +462,6 @@ TEST_P(OccupancyGridMapCasting, AnAxisAlignedWallGivesTheCellGapTimesTheResoluti
   }
 }
 
-/*
- * A maximum range larger than the grid's own diagonal.
- *
- * The caster is built once, at construction, with a maximum of the grid's
- * diagonal in cells, because that is the largest range the grid can ever
- * answer with and the scan's own maximum is not known until a scan arrives.
- * A ray that meets nothing therefore comes back from the caster at the
- * diagonal, and reporting `min(range, max_range)` would call the diagonal an
- * obstacle whenever the scan's maximum exceeds it. It must report the
- * maximum instead.
- */
 TEST_P(OccupancyGridMapCasting, AMaximumRangeBeyondTheGridDiagonalIsReportedRatherThanTheDiagonal)
 {
   const auto built = OccupancyGridMap::build(
@@ -657,11 +493,6 @@ TEST_P(OccupancyGridMapCasting, AMaximumRangeBeyondTheGridDiagonalIsReportedRath
       << "read as a ray that met the far corner.";
 }
 
-/*
- * A maximum range shorter than the range the ray actually meets. The wall is
- * there and is found, and the answer is clipped to what the scan can report,
- * exactly and not to within a cell.
- */
 TEST_P(OccupancyGridMapCasting, AMaximumRangeShorterThanTheTrueRangeIsReported)
 {
   const unsigned int wall_column = kSensorColumn + 20U;
@@ -691,18 +522,6 @@ TEST_P(OccupancyGridMapCasting, AMaximumRangeShorterThanTheTrueRangeIsReported)
     << "It reported " << ranges[0] << " m.";
 }
 
-/*
- * A pose whose cell lies outside the grid, on each of the four sides and on a
- * diagonal.
- *
- * Every ray reports the maximum, which is what the specification requires, and
- * nothing crashes, which is the other half of it: `CDDTCast::calc_range`
- * indexes `map.grid[x][y]` with no bounds test of its own, at two places, so
- * without the guard in `OccupancyGridMap::ranges` a pose outside the grid is
- * undefined behaviour rather than a maximum range. That guard is load bearing
- * and this case is what says so. It is also the case worth running under the
- * address sanitiser.
- */
 TEST_P(OccupancyGridMapCasting, APoseOutsideTheGridReturnsTheMaximumRangeForEveryRay)
 {
   const auto built = OccupancyGridMap::build(
@@ -747,17 +566,6 @@ TEST_P(OccupancyGridMapCasting, APoseOutsideTheGridReturnsTheMaximumRangeForEver
   }
 }
 
-/*
- * A pose whose position is inside the grid but whose heading is not a
- * number.
- *
- * The position guard above says nothing about the heading, and the heading
- * is what the caster turns into the table index it looks the cast up by.
- * Every ray reports the maximum, which is what the specification requires,
- * and nothing crashes, which is the other half of it: a heading that is not
- * a number would otherwise reach that lookup unbounded. It is also the case
- * worth running under the address sanitiser.
- */
 TEST_P(OccupancyGridMapCasting, APoseWithANonFiniteHeadingReturnsTheMaximumRangeForEveryRay)
 {
   const auto built = OccupancyGridMap::build(
@@ -789,17 +597,6 @@ TEST_P(OccupancyGridMapCasting, APoseWithANonFiniteHeadingReturnsTheMaximumRange
       << "test for.";
 }
 
-/*
- * The same room twice, once at the origin with no rotation and once
- * translated and rotated, cast from the correspondingly transformed pose.
- *
- * What a sensor sees cannot depend on where the map that describes the room
- * says the room is. This one case catches every sign error in the rotation,
- * in `cellFromWorld` and in the conversion of the ray heading into the grid's
- * frame alike, and it needs no analytic geometry whatever: a mirrored rotation
- * or a heading rotated the wrong way puts the whole fan somewhere else and
- * every range disagrees.
- */
 TEST_P(OccupancyGridMapCasting, RangesAreInvariantUnderReplacingTheMap)
 {
   const unsigned int left_wall = 15U;
@@ -813,8 +610,7 @@ TEST_P(OccupancyGridMapCasting, RangesAreInvariantUnderReplacingTheMap)
          blockedRectangle(right_wall, 0U, right_wall, kHeight - 1U),
          blockedRectangle(0U, bottom_wall, kWidth - 1U, bottom_wall),
          blockedRectangle(0U, top_wall, kWidth - 1U, top_wall),
-         /* One spike off both axes of symmetry, so the room cannot be rotated
-          * or mirrored onto itself. */
+
          blockedSpikeAt(kSensorColumn + 12U, kSensorRow + 19U)})
     cells.insert(cells.end(), part.begin(), part.end());
 
@@ -835,8 +631,6 @@ TEST_P(OccupancyGridMapCasting, RangesAreInvariantUnderReplacingTheMap)
     CellCoordinates{.column = kSensorColumn + 0.5, .row = kSensorRow + 0.5});
   const double heading = 0.37;
 
-  /* The same physical pose expressed against the moved map's origin: rotate by
-   * the map's yaw, translate by its position, and turn the heading with it. */
   const FSM::Pose here{.x = sensor.x, .y = sensor.y, .t = heading};
   const FSM::Pose there{
     .x = kOriginX + std::cos(kOriginYaw) * sensor.x - std::sin(kOriginYaw) * sensor.y,
@@ -863,21 +657,8 @@ TEST_P(OccupancyGridMapCasting, RangesAreInvariantUnderReplacingTheMap)
       << "grid's frame the wrong way.";
 }
 
-/*
- * The same room again, moved by a whole number of cells with no rotation and
- * at a resolution that is a power of two.
- *
- * Every quantity in the conversion is then exact in binary, so the cell
- * coordinates the caster is handed are bit for bit the same in both maps and
- * the agreement is exact rather than within a cell. Asserting it with no
- * tolerance says something the case above cannot: that the translation is
- * being applied and then undone, and is not merely small enough to hide
- * inside a cell.
- */
 TEST_P(OccupancyGridMapCasting, RangesAreIdenticalWhenTheMapMovesByAWholeNumberOfCells)
 {
-  /* An eighth of a metre a cell, and a move of thirty two cells by sixty four,
-   * so nothing in the conversion rounds. */
   const double resolution = 0.125;
   const double shift_x = 32.0 * resolution;
   const double shift_y = -64.0 * resolution;
@@ -924,28 +705,12 @@ TEST_P(OccupancyGridMapCasting, RangesAreIdenticalWhenTheMapMovesByAWholeNumberO
       << "They returned " << before[i] << " m and " << after[i] << " m.";
 }
 
-/*
- * The ray convention, case one of three, and the sharpest instrument in this
- * file.
- *
- * One spike stands in an otherwise free grid. Exactly one ray can meet it, and
- * which one is a closed form function of the spike's bearing: inverting
- * `bearingOfRay` gives the index, and that index is asserted as an integer with
- * no tolerance. An off by one moves it by one, a mirrored sign reflects it
- * about ray zero, and a half turn moves it by half the ray count, and each of
- * the three fails this outright rather than degrading a range. The ray count is
- * prime, so none of those three can be rescued by a symmetry of the fan, and
- * the spike stands off both axes so none can be rescued by a symmetry of the
- * room.
- */
 TEST_P(OccupancyGridMapCasting, ASingleSpikeLandsOnTheIndexTheConventionNames)
 {
   const double heading = 0.37;
   const unsigned int aimed_at = 3U;
   const double reach = 20.0;
 
-  /* Where a spike has to stand for ray `aimed_at` to run into it: along that
-   * ray's own bearing, `reach` cells out, rounded to the nearest cell. */
   const double bearing = bearingOfRay(aimed_at, kRayCount, heading);
   const unsigned int spike_column = static_cast<unsigned int>(
     std::lround(kSensorColumn + 0.5 + reach * std::cos(bearing)));
@@ -963,9 +728,6 @@ TEST_P(OccupancyGridMapCasting, ASingleSpikeLandsOnTheIndexTheConventionNames)
   const WorldPoint spike = map->worldFromCell(CellCoordinates{
     .column = spike_column + 0.5, .row = spike_row + 0.5});
 
-  /* Rounding the spike onto a cell moved its bearing a fraction of a ray, so
-   * the expected index is taken from where the spike actually is rather than
-   * from where it was aimed. */
   const unsigned int expected = rayIndexOfBearing(
     std::atan2(spike.y - sensor.y, spike.x - sensor.x), heading, kRayCount);
 
@@ -994,22 +756,11 @@ TEST_P(OccupancyGridMapCasting, ASingleSpikeLandsOnTheIndexTheConventionNames)
     << "ray zero being pointed along the pose instead of behind it.";
 }
 
-/*
- * The ray convention, case two of three, and the one a reader will helpfully
- * correct.
- *
- * Ray zero leaves at `pose.t - M_PI`: it points directly *behind* the pose.
- * Nothing about that is intuitive and it is not what a reader assumes, so a
- * spike placed behind the pose is put where only ray zero can meet it and the
- * index is asserted as zero. If someone later decides ray zero should point
- * along the pose, this case is what tells them the core does not agree.
- */
 TEST_P(OccupancyGridMapCasting, ASpikeBehindThePoseLandsOnRayZero)
 {
   const double heading = 0.37;
   const double reach = 20.0;
 
-  /* Directly behind the pose, which is where ray zero points. */
   const double bearing = heading + M_PI;
   const unsigned int spike_column = static_cast<unsigned int>(
     std::lround(kSensorColumn + 0.5 + reach * std::cos(bearing)));
@@ -1045,19 +796,6 @@ TEST_P(OccupancyGridMapCasting, ASpikeBehindThePoseLandsOnRayZero)
     << "to make and which `FSM::X::findExactAngular` does not make.";
 }
 
-/*
- * The ray convention, case three of three: two spikes at unrelated bearings,
- * on a map that is both translated and rotated.
- *
- * The pair of indices is asserted as a set, which no single systematic error
- * survives: at twenty three rays an off by one gives {2, 10} or {4, 12}, a
- * mirrored sign gives {12, 20} and a half turn gives {14, 22} or {15, 0}, and
- * none of those is {3, 11}. The two spikes stand at twelve and twenty four
- * cells, so which index goes with which spike is pinned by the ranges as well
- * as by the set. The rotated origin puts the whole convention through the
- * world to grid conversion of the heading, which the unrotated cases above
- * cannot reach.
- */
 TEST_P(OccupancyGridMapCasting, TwoSpikesLandOnTheIndicesTheConventionNames)
 {
   const double heading_in_grid = 0.37;
@@ -1072,8 +810,6 @@ TEST_P(OccupancyGridMapCasting, TwoSpikesLandOnTheIndicesTheConventionNames)
 
   for (unsigned int s = 0; s < 2; ++s)
   {
-    /* The grid's own frame, since the spike is placed by cell: the pose's
-     * heading in that frame is its world heading less the map's yaw. */
     const double bearing = bearingOfRay(aimed_at[s], kRayCount, heading_in_grid);
     spike_column[s] = static_cast<unsigned int>(
       std::lround(kSensorColumn + 0.5 + reach[s] * std::cos(bearing)));
@@ -1129,9 +865,6 @@ TEST_P(OccupancyGridMapCasting, TwoSpikesLandOnTheIndicesTheConventionNames)
       << "the unrotated cases passing means the ray heading is being turned "
       << "into the grid's frame with the wrong sign.";
 
-    /* The spike is three cells across, so the ray enters it between a cell and
-     * a half short of its centre and a cell and a half beyond, and the caster
-     * adds up to a cell of its own. */
     const double centre = reach[s] * map->resolution();
     EXPECT_NEAR(ranges[met[s]], centre, 2.5 * map->resolution())
       << "the spike at cell (" << spike_column[s] << ", " << spike_row[s]
@@ -1151,12 +884,6 @@ INSTANTIATE_TEST_SUITE_P(
     CastingMethod::bresenham, CastingMethod::cddt, CastingMethod::ray_marching),
   methodSuffix);
 
-/*
- * With no yaw the conversion is nothing but a translation and a division, so
- * it can be checked against arithmetic with no rotation anywhere in it. If
- * this passes and the rotated cases below fail, the fault is in the rotation
- * alone.
- */
 TEST(OccupancyGridMapConversion, AMapWithNoYawReducesToADivisionByTheResolution)
 {
   const auto built = OccupancyGridMap::build(
@@ -1198,12 +925,6 @@ TEST(OccupancyGridMapConversion, AMapWithNoYawReducesToADivisionByTheResolution)
   }
 }
 
-/*
- * The cell diagonally opposite the origin is the width by the height, whatever
- * the map's rotation. It is the one point of the grid that is as far from the
- * origin as a point of the grid can be, so a rotation applied at half strength
- * or in the wrong direction moves it further than anything else does.
- */
 TEST(OccupancyGridMapConversion, TheFarCornerIsTheWidthByTheHeight)
 {
   const unsigned int width = 20U;
@@ -1222,8 +943,6 @@ TEST(OccupancyGridMapConversion, TheFarCornerIsTheWidthByTheHeight)
   const WorldPoint corner = map->worldFromCell(
     CellCoordinates{.column = width, .row = height});
 
-  /* The corner in the world: the origin, plus the grid's own diagonal rotated
-   * by the map's yaw and scaled by the resolution. */
   const double expected_x = kOriginX + map->resolution() *
     (std::cos(kOriginYaw) * width - std::sin(kOriginYaw) * height);
   const double expected_y = kOriginY + map->resolution() *
@@ -1259,11 +978,6 @@ TEST(OccupancyGridMapConversion, TheFarCornerIsTheWidthByTheHeight)
     << back.row << ".";
 }
 
-/*
- * The origin is where cell zero zero stands, by definition, so this one holds
- * exactly and not to within anything: both differences the conversion
- * subtracts are zero, and zero divided by the resolution is zero.
- */
 TEST(OccupancyGridMapConversion, TheOriginIsCellZeroZero)
 {
   const auto built = OccupancyGridMap::build(
@@ -1298,16 +1012,6 @@ TEST(OccupancyGridMapConversion, TheOriginIsCellZeroZero)
     << ", exactly. It was at " << back.y << ".";
 }
 
-/*
- * The round trip at the four corners, the centre and a point well outside,
- * over a map that is both translated and rotated.
- *
- * `cellFromWorld` and `worldFromCell` are each other's inverse and are written
- * one below the other, so a sign error in one of them and not the other shows
- * up here without any geometry being worked out at all. The point outside
- * matters because the conversion is defined everywhere and only `isInside` has
- * an opinion about the grid's edges.
- */
 TEST(OccupancyGridMapConversion, WorldAndCellRoundTripAtTheCornersTheCentreAndOutside)
 {
   const unsigned int width = 20U;
@@ -1352,12 +1056,6 @@ TEST(OccupancyGridMapConversion, WorldAndCellRoundTripAtTheCornersTheCentreAndOu
   }
 }
 
-/*
- * A blocked cell is not free, and neither is an unknown one. The unknown rule
- * is the conservative one the specification requires: a cell nobody has
- * observed is treated as occupied, so a pose in unmapped space is refused
- * rather than searched.
- */
 TEST(OccupancyGridMapFreeSpace, ABlockedCellAndAnUnknownCellAreBothNotFree)
 {
   const unsigned int blocked_column = 3U;
@@ -1419,16 +1117,6 @@ TEST(OccupancyGridMapFreeSpace, AFreeCellIsFree)
     << "is the other half of what free means here.";
 }
 
-/*
- * Outside the grid on each of the four sides and on each of the four
- * diagonals.
- *
- * This group is the reason `isFree` cannot lean on the borrowed
- * `OMap::isOccupied`, which reports an out of bounds cell as *unoccupied*. An
- * `isFree` written on top of it would call the whole world outside the map
- * free, and the pose generator, which draws positions until one is free, would
- * happily hand back a pose in the middle of nowhere.
- */
 TEST(OccupancyGridMapFreeSpace, OutsideTheGridIsNotFreeOnAnySideOrDiagonal)
 {
   const unsigned int width = 20U;
@@ -1511,17 +1199,6 @@ TEST(OccupancyGridMapMethodNames, EveryEnumeratorRoundTripsThroughItsName)
   }
 }
 
-/*
- * Build a map, take a second pointer to it, drop the first, and ask it a
- * question.
- *
- * This is the shape the map replacement rule needs: `build` hands back a
- * shared pointer to a const object, so a correction that copies the pointer at
- * its start finishes against the map it started with even when a newer map
- * replaces the node's own pointer half way through. The honest note is that
- * this proves the shape and not the node's use of it, which cannot be proven
- * below the node.
- */
 TEST(OccupancyGridMapOwnership, TheMapOutlivesTheFirstPointerToIt)
 {
   const unsigned int column = 5U;
@@ -1556,16 +1233,6 @@ TEST(OccupancyGridMapOwnership, TheMapOutlivesTheFirstPointerToIt)
     << "it started with while a newer map replaces the node's pointer.";
 }
 
-/*
- * The threshold rule at its boundary, and at the values a malformed map
- * carries.
- *
- * A cell at the threshold blocks and one below it does not, which is the
- * "at or above" reading. Every negative value blocks, not only the minus one
- * that means unknown: that is the conservative reading of a map whose values
- * are outside the range the message defines, and it is asserted here so that
- * it is not later tidied into passing.
- */
 TEST_P(OccupancyGridMapThreshold, ACellIsFreeExactlyWhenItsValueSaysSo)
 {
   const unsigned int column = 5U;
@@ -1605,15 +1272,6 @@ INSTANTIATE_TEST_SUITE_P(
     ThresholdCase{.value = -50, .free = false},
     ThresholdCase{.value = -128, .free = false}));
 
-/*
- * The transposition case, and it must be non square.
- *
- * A grid twenty wide and forty high with one blocked cell at column three, row
- * seven. Reading the flat data with the row and the column the other way round
- * puts that cell at column seven, row three, and both of those are inside a
- * twenty by forty grid, so a square fixture could not tell the two readings
- * apart. This one can.
- */
 TEST(OccupancyGridMapTransposition, ABlockedCellIsNotBlockedAtItsTransposedCell)
 {
   const unsigned int width = 20U;
@@ -1651,15 +1309,6 @@ TEST(OccupancyGridMapTransposition, ABlockedCellIsNotBlockedAtItsTransposedCell)
     << "between the message's `data` and the answer.";
 }
 
-/*
- * The other half of the transposition case: a blocked cell whose transposed
- * cell is not merely a different cell but is outside the grid altogether.
- *
- * Column three, row thirty is inside a grid twenty wide and forty high.
- * Column thirty, row three is not, because thirty is beyond a width of twenty.
- * So a transposed read of this cell has nowhere to go, and a transposition
- * that survived the case above by symmetry cannot survive this one.
- */
 TEST(OccupancyGridMapTransposition, ABlockedCellWhoseTransposedCellIsOutsideTheGrid)
 {
   const unsigned int width = 20U;

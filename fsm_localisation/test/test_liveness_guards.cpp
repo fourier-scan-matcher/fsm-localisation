@@ -20,8 +20,7 @@
 
 /**
  * @brief The two bounds that stop the grid path spinning forever on an
- *        estimate standing in unmapped or blocked space.
- *
+ * estimate standing in unmapped or blocked space.
  * @details
  * `Utils::generatePose`'s grid branch gives up after a fixed number of draws
  * and `Match::l2recovery`'s grid branch gives up after a fixed number of
@@ -31,7 +30,6 @@
  * below has none, so both bounds are reached on every run, which is what
  * lets this file assert that they are reached at all rather than trust that
  * they would be.
- *
  * The ring path is not tested here. It has no such bound, on purpose, and
  * that is unchanged by any of this.
  */
@@ -47,9 +45,6 @@
 
 namespace
 {
-
-/* A grid with no free position anywhere, so the draw loop that looks for one
- * always exhausts its bound rather than succeeding on some draw. */
 class EntirelyBlockedGrid : public FSM::GridReference
 {
  public:
@@ -66,7 +61,7 @@ class EntirelyBlockedGrid : public FSM::GridReference
   }
 };
 
-}  // namespace
+}
 
 TEST(LivenessGuards, TheInnerDrawBoundIsReachedAndReportedRatherThanSpinning)
 {

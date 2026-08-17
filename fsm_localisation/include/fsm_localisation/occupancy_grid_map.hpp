@@ -20,7 +20,7 @@
 
 /**
  * @brief An occupancy grid that satisfies `FSM::GridReference`, built once
- *        from a `nav_msgs::msg::OccupancyGrid` and immutable thereafter.
+ * from a `nav_msgs::msg::OccupancyGrid` and immutable thereafter.
  */
 #ifndef FSM_LOCALISATION__OCCUPANCY_GRID_MAP_HPP_
 #define FSM_LOCALISATION__OCCUPANCY_GRID_MAP_HPP_
@@ -43,10 +43,9 @@ class RangeMethod;
 
 namespace fsm_localisation
 {
-
 /**
  * @brief Which of the borrowed library's three algorithms casts a ray into
- *        an `OccupancyGridMap`.
+ * an `OccupancyGridMap`.
  */
 enum class CastingMethod
 {
@@ -57,7 +56,6 @@ enum class CastingMethod
 
 /**
  * @brief A position expressed in continuous grid cells rather than metres.
- *
  * `column` is bounded by the grid's width and `row` by its height. Both are
  * continuous: a sensor standing at the middle of a cell casts from the
  * middle of that cell, not from its rounded index.
@@ -70,7 +68,7 @@ struct CellCoordinates
 
 /**
  * @brief A position expressed in the world frame the map's origin is given
- *        in.
+ * in.
  */
 struct WorldPoint
 {
@@ -81,21 +79,20 @@ struct WorldPoint
 /**
  * @brief Parse a casting method's name.
  * @return the matching enumerator, or `std::nullopt` when `name` is none of
- *         `"bresenham"`, `"cddt"` or `"ray_marching"`.
+ * `"bresenham"`, `"cddt"` or `"ray_marching"`.
  */
 std::optional<CastingMethod> castingMethodFromName(const std::string& name);
 
 /**
  * @brief The name a casting method was parsed from, for a log line or a test
- *        failure message.
+ * failure message.
  */
 std::string_view nameOfCastingMethod(const CastingMethod method);
 
 /**
  * @brief An occupancy grid, blocked cells and one caster over them, standing
- *        behind `FSM::GridReference` so the core can cast a ray into it
- *        without knowing what a ROS occupancy grid is.
- *
+ * behind `FSM::GridReference` so the core can cast a ray into it
+ * without knowing what a ROS occupancy grid is.
  * @details
  * Immutable from the end of construction to destruction: there is no setter,
  * no `update`, and no non `const` member of any kind. A second map is a
@@ -104,7 +101,6 @@ std::string_view nameOfCastingMethod(const CastingMethod method);
  * elsewhere. `build` is the only way to make one, and it hands back a
  * `std::shared_ptr<const OccupancyGridMap>` from a private constructor, so an
  * owner that is neither shared nor `const` cannot exist.
- *
  * This type converts between the world frame and the grid's own cells
  * itself, in double, through the map's full origin: translation and yaw
  * both. The borrowed library's own world-taking entry points are never
@@ -118,11 +114,11 @@ public:
   /**
    * @brief Validate `map` and build an `OccupancyGridMap` from it.
    * @param occupancy_threshold a cell value at or above this, or below zero,
-   *        is blocked; every other value is free.
+   * is blocked; every other value is free.
    * @param method which of the three borrowed casters this map builds. One
-   *        is built, not three.
+   * is built, not three.
    * @return a complete map, or a sentence naming the field that failed
-   *         validation and the value it was given.
+   * validation and the value it was given.
    */
   static std::expected<std::shared_ptr<const OccupancyGridMap>, std::string> build(
     const nav_msgs::msg::OccupancyGrid& map,
@@ -158,10 +154,10 @@ public:
 
   /**
    * @brief Cast `num_rays` rays from `pose` and return the range each meets,
-   *        in metres.
+   * in metres.
    * @details See the ray angle contract carried above
-   *          `FSM::GridReference::ranges` in `fsm_core.hpp`: this override
-   *          computes each ray's heading with that same expression.
+   * `FSM::GridReference::ranges` in `fsm_core.hpp`: this override
+   * computes each ray's heading with that same expression.
    */
   std::vector<double> ranges(
     const FSM::Pose& pose,
@@ -203,6 +199,6 @@ private:
   const unsigned int width_;
 };
 
-}  // namespace fsm_localisation
+}
 
-#endif  // FSM_LOCALISATION__OCCUPANCY_GRID_MAP_HPP_
+#endif

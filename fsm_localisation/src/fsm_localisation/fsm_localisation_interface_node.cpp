@@ -20,7 +20,7 @@
 
 /**
  * @brief Instantiates the interface class to be used for triggering the
- *        functionality the node provides
+ * functionality the node provides
  */
 #include <exception>
 
@@ -30,14 +30,6 @@ int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
 
-  /*
-   * A configuration the node cannot run with is reported as a sentence naming
-   * the setting and its value, and the process exits. Letting the exception
-   * leave main instead would end the process just as surely, but through
-   * std::terminate, which buries that sentence under a message about an
-   * uncaught exception. What an operator needs to read is which setting was
-   * wrong.
-   */
   try
   {
     rclcpp::executors::MultiThreadedExecutor exec;
