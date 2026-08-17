@@ -107,8 +107,9 @@
     ray_search: "angular"
 
     # Three behaviours carried across from the scan-to-map matcher this package
-    # borrows from, each off by default so that the matcher behaves exactly as
-    # it always has while all three are off.
+    # borrows from. The odometry matcher never had any of them and the recorded
+    # comparisons assume their absence, so all three stay off here. They are on
+    # in the amelioration file, which is that matcher.
 
     # Once the rotation criterion passes 0.99999, jump straight to the maximum
     # angular oversampling instead of climbing to it. Fires at most once per

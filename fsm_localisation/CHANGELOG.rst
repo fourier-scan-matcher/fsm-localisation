@@ -49,7 +49,11 @@ Forthcoming
 * Adds ``enforce_early_gearup``, ``enforce_translation_bound`` and
   ``recover_on_failed_sift``, three behaviours carried across from the
   scan-to-map matcher, all defaulting off so that the matcher behaves exactly as
-  it always has while all three are off. Available in both modes.
+  it always has while all three are off. Available in both modes. All three are
+  unconditional in the scan-to-map matcher and absent from the odometry one, and
+  the ``fsm`` readme prescribes the gear-up for scan-to-map-scan matching and
+  against it for scan matching, so ``config/params_amelioration.yaml`` turns all
+  three on and ``config/params_odometry.yaml`` leaves all three off.
 * Corrects two further defects in the matcher, each characterised by a test that
   failed first: an out of bounds read in the rotation stage, and a read of an
   empty vector reachable through ``recover_on_failed_sift``. The first changes

@@ -160,23 +160,27 @@
     ray_search: "angular"
 
     # Three behaviours carried across from the scan-to-map matcher this package
-    # borrows from, each off by default so that the matcher behaves exactly as
-    # it always has while all three are off.
+    # borrows from. All three are unconditional in that matcher, so all three
+    # are on here: this mode is that matcher. They are off in the odometry file,
+    # where the matcher never had them and the recorded comparisons assume their
+    # absence.
 
     # Once the rotation criterion passes 0.99999, jump straight to the maximum
     # angular oversampling instead of climbing to it. Fires at most once per
     # match. Buys time on a match that is already going well.
-    enforce_early_gearup: false
+    enforce_early_gearup: true
 
     # The translation stage abandons a candidate whose position has moved more
     # than xy_bound + 0.01 on either axis from where the stage started, and
     # treats it as a failure. Keeps a correction from wandering off the map, at
     # the cost of giving up on one that would have come good.
-    enforce_translation_bound: false
+    enforce_translation_bound: true
 
     # When every candidate angle fails its trial translation, start a recovery
-    # rather than carry on with the angle of a candidate that failed.
-    recover_on_failed_sift: false
+    # rather than carry on with the angle of a candidate that failed. Reaches
+    # the recovery path more often, so rng_seed governs whether two runs over
+    # the same input agree exactly.
+    recover_on_failed_sift: true
 
     # --------------------------------------------------------------------------
     # Node behaviour

@@ -315,7 +315,7 @@ A parameter outside its permitted range is refused at start-up with a sentence n
 
 Frame ids carry no leading slash. tf2 rejects them.
 
-The last three matcher switches are carried across from the scan-to-map matcher this package borrows from. All three off is the behaviour the matcher has always had, which is why all three default to off.
+The last three matcher switches are carried across from the scan-to-map matcher this package borrows from. All three are unconditional in that matcher and absent from the odometry one, so the shipped amelioration configuration turns all three on and the shipped odometry configuration leaves all three off. They default to off, since a node given neither configuration file has no mode to infer them from. With all three on, a correction reaches the recovery path more often than before, so `rng_seed` decides whether two runs over the same input agree exactly.
 
 `size_scan` decides how many rays a scan is matched at. `0`, the default, matches every ray the scan carries: the sensor's own resolution, with nothing discarded. In odometry mode the first scan to arrive settles the size for the session, since two scans can only be matched against each other at one size, and a later scan of a different length is resampled to it rather than dropped. In amelioration mode it is settled afresh for every correction, since one correction is never compared against another.
 
