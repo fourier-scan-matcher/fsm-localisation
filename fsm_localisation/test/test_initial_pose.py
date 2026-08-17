@@ -81,6 +81,7 @@ def generate_test_description():
         executable='fsm_localisation_interface_node',
         name='fsm_localisation',
         output='screen',
+        parameters=[{'mode': 'odometry'}],
     )
     return (
         launch.LaunchDescription([node, launch_testing.actions.ReadyToTest()]),

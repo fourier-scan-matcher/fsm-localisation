@@ -95,6 +95,7 @@ add_library(fsm_localisation_interface SHARED
 
 target_link_libraries(fsm_localisation_interface PUBLIC
   fsm_localisation_core
+  fsm_localisation_grid
   rclcpp::rclcpp
   tf2::tf2
   tf2_ros::tf2_ros
@@ -215,6 +216,16 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_fsm_localisation_occupancy_grid_map
     test/test_occupancy_grid_map.cpp)
+
+  # The refusals the node makes before any message arrives, exercised by
+  # constructing the node rather than by launching it. It links the interface
+  # and takes no arithmetic settings of its own: what it asserts is which
+  # configurations start and which do not, and none of that turns on a
+  # floating point result.
+  ament_add_gtest(test_fsm_localisation_node_params
+    test/test_node_params.cpp)
+  target_link_libraries(test_fsm_localisation_node_params
+    fsm_localisation_interface)
 
   ament_add_gtest(test_fsm_localisation_params
     test/test_params.cpp)
