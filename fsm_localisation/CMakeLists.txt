@@ -139,6 +139,47 @@ if(BUILD_TESTING)
   # compiler is free to reassociate, which moves results well past that, so a
   # passing test would say nothing. Force the exact configuration here whatever
   # the library itself was configured with.
+  #
+  # That forcing is why the suites below compile the core and the grid into
+  # themselves through these two object libraries rather than linking
+  # fsm_localisation_core and fsm_localisation_grid. Nearly everything the core
+  # is lives in a header, as functions the compiler is free to emit into every
+  # translation unit that uses them, and two copies compiled under different
+  # arithmetic settings are two different functions wearing one name. A test
+  # that both compiled the header under exact settings and linked a library
+  # built under the shipped ones therefore held two definitions of each, and
+  # which one every call reached was decided by the order the linker happened to
+  # see them: a test could assert a tolerance it was not in fact measuring, and
+  # the library's own internal calls could be answered by the test's copies.
+  # Compiled in here instead, every definition in a test binary comes from one
+  # configuration, which is the configuration the test asked for.
+  #
+  # One object library per source file rather than one per suite, so the choice
+  # of plan flag is made once and cannot differ between the two.
+  add_library(fsm_localisation_core_exact OBJECT
+    src/fsm_localisation/fsm_localisation.cpp)
+
+  target_include_directories(fsm_localisation_core_exact PUBLIC
+    ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+  target_link_libraries(fsm_localisation_core_exact PUBLIC
+    Eigen3::Eigen
+    CGAL::CGAL
+    PkgConfig::FFTW3)
+
+  target_compile_options(fsm_localisation_core_exact PUBLIC
+    -O2 -fno-fast-math -ffp-contract=off)
+
+  target_compile_definitions(fsm_localisation_core_exact PUBLIC
+    FSM_LOCALISATION_FFTW_ESTIMATE)
+
+  add_library(fsm_localisation_grid_exact OBJECT
+    src/fsm_localisation/occupancy_grid_map.cpp)
+
+  target_link_libraries(fsm_localisation_grid_exact PUBLIC
+    fsm_localisation_core_exact
+    ${nav_msgs_TARGETS})
+
   # One source file, one test. The dimensions case used to have to read values
   # nothing had ever written, and what that reported was not stable enough to
   # trust in the same process as the other three; the constructor that read
@@ -302,41 +343,33 @@ if(BUILD_TESTING)
                       test_fsm_localisation_scan_to_map_switches
                       test_fsm_localisation_stages)
     if(TARGET ${test_target})
-      target_link_libraries(${test_target} fsm_localisation_core)
-      target_compile_options(${test_target} PRIVATE
-        -O2 -fno-fast-math -ffp-contract=off)
+      target_link_libraries(${test_target} fsm_localisation_core_exact)
       target_compile_definitions(${test_target} PRIVATE
-        FSM_LOCALISATION_FFTW_ESTIMATE
         FSM_LOCALISATION_TEST_FIXTURES="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures")
     endif()
   endforeach()
 
-  # The three grid suites link the grid library rather than the core alone,
-  # since what they exercise is the type that reads an occupancy grid message.
-  # That library links the core publicly, so they still see everything the
-  # suites above do. They read no fixture file and touch no FFT, so they take
-  # the exact arithmetic settings and nothing else.
-  foreach(test_target test_fsm_localisation_occupancy_grid_map
+  # The four suites that need the grid as well as the core, since what they
+  # exercise is the type that reads an occupancy grid message. Both object
+  # libraries are named rather than relying on the grid one carrying the core:
+  # cmake adds an object library's own object files to whatever links it
+  # directly and does not pass them on a second time, so a suite naming the grid
+  # alone gets the grid's objects and none of the core's.
+  #
+  # Unlike the other three, the corrector suite runs the matcher and so reaches
+  # the transform. Plans there are selected by heuristic rather than by timing,
+  # so a correction repeated in a later process gives the answer this one
+  # recorded.
+  foreach(test_target test_fsm_localisation_corrector
+                      test_fsm_localisation_occupancy_grid_map
                       test_fsm_localisation_ray_casting
                       test_fsm_localisation_reference_agreement)
     if(TARGET ${test_target})
-      target_link_libraries(${test_target} fsm_localisation_grid)
-      target_compile_options(${test_target} PRIVATE
-        -O2 -fno-fast-math -ffp-contract=off)
+      target_link_libraries(${test_target}
+        fsm_localisation_core_exact
+        fsm_localisation_grid_exact)
     endif()
   endforeach()
-
-  # The corrector suite links the grid library for the same reason those three
-  # do, and unlike them it runs the matcher, so it does reach the transform.
-  # Its plans are selected by heuristic rather than by timing, so a correction
-  # repeated in a later process gives the answer this one recorded.
-  if(TARGET test_fsm_localisation_corrector)
-    target_link_libraries(test_fsm_localisation_corrector fsm_localisation_grid)
-    target_compile_options(test_fsm_localisation_corrector PRIVATE
-      -O2 -fno-fast-math -ffp-contract=off)
-    target_compile_definitions(test_fsm_localisation_corrector PRIVATE
-      FSM_LOCALISATION_FFTW_ESTIMATE)
-  endif()
 endif()
 
 # ------------------------------------------------------------------------------
