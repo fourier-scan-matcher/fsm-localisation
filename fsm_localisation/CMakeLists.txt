@@ -148,6 +148,12 @@ if(BUILD_TESTING)
   ament_add_gtest(test_fsm_localisation_core
     test/test_defects_core.cpp)
 
+  # A regression in the recovery refusal is a hang rather than a wrong answer,
+  # so this target is bounded on wall clock time as the liveness one is.
+  ament_add_gtest(test_fsm_localisation_corrector
+    test/test_corrector.cpp
+    TIMEOUT 120)
+
   ament_add_gtest(test_fsm_localisation_core_golden
     test/test_core_golden.cpp)
 
@@ -284,6 +290,18 @@ if(BUILD_TESTING)
         -O2 -fno-fast-math -ffp-contract=off)
     endif()
   endforeach()
+
+  # The corrector suite links the grid library for the same reason those three
+  # do, and unlike them it runs the matcher, so it does reach the transform.
+  # Its plans are selected by heuristic rather than by timing, so a correction
+  # repeated in a later process gives the answer this one recorded.
+  if(TARGET test_fsm_localisation_corrector)
+    target_link_libraries(test_fsm_localisation_corrector fsm_localisation_grid)
+    target_compile_options(test_fsm_localisation_corrector PRIVATE
+      -O2 -fno-fast-math -ffp-contract=off)
+    target_compile_definitions(test_fsm_localisation_corrector PRIVATE
+      FSM_LOCALISATION_FFTW_ESTIMATE)
+  endif()
 endif()
 
 # ------------------------------------------------------------------------------

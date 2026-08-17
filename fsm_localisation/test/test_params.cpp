@@ -308,6 +308,42 @@ TEST(ParameterValidation, AnUnknownRaySearchIsRefused)
 }
 
 /*
+ * An occupancy grid states a cell as a percentage, so a threshold outside that
+ * range is met by every cell or by none. Both ends are refused and both ends
+ * of the range itself are allowed, since a threshold of zero and a threshold
+ * of one hundred are each a defensible reading of a map.
+ */
+TEST(ParameterValidation, AnOccupancyThresholdOutsideAPercentageIsRefused)
+{
+  fsm_localisation::Parameters parameters;
+
+  parameters.occupancy_threshold = -1;
+
+  std::string problem = fsm_localisation::validate(parameters);
+
+  EXPECT_TRUE(mentions(problem, "occupancy_threshold")) << problem;
+  EXPECT_TRUE(mentions(problem, "-1")) << problem;
+
+  parameters.occupancy_threshold = 101;
+
+  problem = fsm_localisation::validate(parameters);
+
+  EXPECT_TRUE(mentions(problem, "occupancy_threshold")) << problem;
+  EXPECT_TRUE(mentions(problem, "101")) << problem;
+}
+
+TEST(ParameterValidation, AnOccupancyThresholdAtEitherEndOfThePercentageIsAllowed)
+{
+  fsm_localisation::Parameters parameters;
+
+  parameters.occupancy_threshold = 0;
+  EXPECT_EQ(fsm_localisation::validate(parameters), std::string{});
+
+  parameters.occupancy_threshold = 100;
+  EXPECT_EQ(fsm_localisation::validate(parameters), std::string{});
+}
+
+/*
  * Only the first problem is reported. Somebody fixing a configuration file
  * wants one thing to fix at a time, and the check stops at the first, so a
  * file with two mistakes names the earlier one.

@@ -23,6 +23,7 @@
 #include <cstddef>
 #include <expected>
 #include <functional>
+#include <memory>
 #include <span>
 #include <string>
 #include <vector>
@@ -94,6 +95,20 @@ struct Parameters
   /** When every candidate angle fails its trial translation, trigger a
    *  recovery rather than proceed with the angle of a failed candidate. */
   bool recover_on_failed_sift{false};
+
+  /** Read only when a map is being matched against. Neither reaches the
+   *  matcher: both settle how an occupancy grid message is turned into a map,
+   *  which happens before a corrector is constructed. */
+
+  /** A cell at or above this is blocked, and so is a cell no sensor has ever
+   *  seen. 0 to 100, the range an occupancy grid states a cell in. */
+  int occupancy_threshold{65};
+
+  /** Which algorithm casts a ray into the map: "ray_marching", "bresenham"
+   *  or "cddt". The three names are recognised in one place, by
+   *  `castingMethodFromName`, and that is where an unrecognised one is
+   *  refused, so `validate` below deliberately does not screen this. */
+  std::string map_scan_method{"ray_marching"};
 };
 
 /**
@@ -124,6 +139,64 @@ enum class MatchError
 
   /** Every range in the scan was invalid, so there is nothing to match. */
   scan_entirely_invalid,
+};
+
+/**
+ * @brief What one successful correction yields.
+ *
+ * There is no accumulated pose and no trajectory. A correction is answerable
+ * from the estimate it was handed and nothing else, so there is nothing to
+ * accumulate into.
+ */
+struct CorrectionResult
+{
+  /** The corrected sensor pose, in the frame the estimate was given in. */
+  Pose corrected;
+
+  double execution_time{0.0};
+  unsigned int num_recoveries{0};
+};
+
+/**
+ * @brief Why an estimate was not corrected.
+ */
+enum class CorrectionError
+{
+  /** The scan carried fewer ranges than the configured scan size. */
+  scan_too_short,
+
+  /** Every range in the scan was invalid, so there is nothing to match. */
+  scan_entirely_invalid,
+
+  /**
+   * The estimate does not stand on free space: either it is outside the map
+   * altogether or the cell it stands in is blocked. The two are one question
+   * here, because a map is reached through `FSM::GridReference`, which asks
+   * whether a point is free and nothing else. A host holding the map itself
+   * can tell the two apart and say which in its own message.
+   *
+   * Refused before matching rather than after, because the search that
+   * recovers a bad match draws positions until one is free, and around an
+   * estimate with no free space near it there are none to draw.
+   */
+  estimate_not_in_free_space,
+
+  /**
+   * Every ray cast from the estimate came back at the scan's maximum range,
+   * which means the map knows nothing about anywhere the sensor can see from
+   * there. Matching on would spend a whole match reaching the same conclusion
+   * slowly.
+   */
+  first_cast_entirely_at_max_range,
+
+  /**
+   * The match spent its whole recovery budget. On a map that means the search
+   * kept landing somewhere it could make no progress from, which is what an
+   * estimate that has wandered into unmapped space looks like from outside.
+   * Refused even where the last attempt happened to converge, since a match
+   * that needed every recovery it was allowed is not an answer to report.
+   */
+  recovery_budget_exhausted,
 };
 
 /**
@@ -159,6 +232,66 @@ std::string validate(const Parameters& parameters);
  * destination while a match is running.
  */
 void setDiagnosticSink(std::function<void(const std::string&)> sink);
+
+/**
+ * @brief Correction of a pose estimate against a map, by the same
+ *        correspondenceless scan matching.
+ *
+ * @details
+ * Where the odometry matches a scan against the scan before it and reports how
+ * far the sensor moved between them, this matches a scan against a map and
+ * reports where the sensor actually was. The matcher walks the estimate around
+ * the map until the scan it would see there agrees with the scan it did see,
+ * casting into the map at every pose it tries rather than at one scan frozen
+ * where it started.
+ *
+ * Nothing survives a correction. There is no previous scan, no accumulated
+ * pose and no trajectory, so two corrections in either order give the same two
+ * answers, and a correction can be repeated exactly by pinning `rng_seed`.
+ *
+ * The map is borrowed through `FSM::GridReference`, which is what keeps this
+ * file and its implementation free of any ROS header: a host reads an
+ * occupancy grid message into an `OccupancyGridMap` and hands that over as the
+ * interface. The shared pointer is held for the life of the corrector, so a
+ * host replacing the map mid correction constructs a second corrector rather
+ * than editing this one's.
+ *
+ * The accuracy a correction can reach is bounded by the map and not by the
+ * matcher. A ray stops at a cell, so a map of five centimetre cells cannot
+ * support an answer better than five centimetres however good the match is.
+ */
+class Corrector
+{
+public:
+  Corrector(const Parameters& parameters,
+    std::shared_ptr<const FSM::GridReference> map);
+
+  Corrector(const Corrector&) = delete;
+  Corrector& operator=(const Corrector&) = delete;
+  Corrector(Corrector&&) = delete;
+  Corrector& operator=(Corrector&&) = delete;
+
+  /**
+   * @brief Correct one pose estimate against the map.
+   *
+   * @param ranges the scan as the sensor reported it, unfilled and unreduced.
+   * @param estimate where the sensor is thought to have been when that scan
+   *        was taken, in the frame the map is given in.
+   * @param range_max the scan's own maximum range, which is what a ray meeting
+   *        nothing reports. The map has never seen it, so it is given per
+   *        correction rather than held.
+   */
+  std::expected<CorrectionResult, CorrectionError> correct(
+    std::span<const double> ranges,
+    const Pose& estimate,
+    double range_max) const;
+
+  const Parameters& parameters() const { return parameters_; }
+
+private:
+  Parameters parameters_;
+  std::shared_ptr<const FSM::GridReference> map_;
+};
 
 /**
  * @brief Lidar odometry by correspondenceless scan matching.
