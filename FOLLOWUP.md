@@ -425,18 +425,6 @@ for.
 
 ## Proofs and comparisons
 
-### The launch tests cannot be run alongside each other
-
-Each of the seven launch test files starts its own node, and they use the same
-node names and the same topic names in one DDS domain. A case that asserts a
-node has published nothing yet therefore sees whatever another test's started
-node published. Measured on a four core machine: run in parallel, twenty four of
-the thirty one cases fail on that alone; run one at a time, all thirty one pass.
-
-Closing it means giving each launch test a domain of its own, or a namespace of
-its own for every node it starts. Until then the suite has to be run serially,
-with `ctest -j1` or the equivalent, and nothing says so.
-
 ### The comparison harness does not assert that recovery stayed quiet
 
 Because the recovery search draws its restart from hardware entropy, a comparison

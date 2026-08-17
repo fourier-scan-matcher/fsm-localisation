@@ -263,8 +263,11 @@ if(BUILD_TESTING)
   # and takes no arithmetic settings of its own: what it asserts is which
   # configurations start and which do not, and none of that turns on a
   # floating point result.
+  #
+  # It carries a domain of its own for the reason the launch tests below do.
   ament_add_gtest(test_fsm_localisation_node_params
-    test/test_node_params.cpp)
+    test/test_node_params.cpp
+    ENV ROS_DOMAIN_ID=71)
   target_link_libraries(test_fsm_localisation_node_params
     fsm_localisation_interface)
 
@@ -295,11 +298,23 @@ if(BUILD_TESTING)
   # so the directory holding the shared helpers has to be on the import path
   # for it. Setting it here keeps the test files free of path manipulation.
   #
+  # Every file below starts a node of its own, and they all use the same node
+  # names and the same topic names. Left in one DDS domain they hear each other:
+  # a case asserting that its node has published nothing yet sees what another
+  # file's started node published, and twenty four of the thirty one cases in
+  # this package failed that way whenever the suite was run in parallel. A
+  # domain per file, and one for the gtest that constructs a node, is what keeps
+  # each test hearing only itself. The numbers are arbitrary and only have to
+  # differ; anything from 0 to 101 is valid on this middleware, and a domain in
+  # use outside the tests is a reason to move them rather than to widen them.
+  #
   # The startup contract needs a node nothing has touched, so it launches its
   # own rather than sharing the one the behaviour tests drive.
   add_launch_test(test/test_node_startup.py TIMEOUT 300
+    ENV ROS_DOMAIN_ID=72
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
   add_launch_test(test/test_node_behaviour.py TIMEOUT 400
+    ENV ROS_DOMAIN_ID=73
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
 
   # The initial pose cases launch their own node for a different reason: the
@@ -307,30 +322,35 @@ if(BUILD_TESTING)
   # pose topic, which is not a state to hand on to a case expecting an
   # answer.
   add_launch_test(test/test_initial_pose.py TIMEOUT 300
+    ENV ROS_DOMAIN_ID=74
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
 
   # The correcting mode, driven through a running node: what it recovers and
   # what it refuses. Each case waits on a correction rather than on a clock, so
   # the budget is for the whole file rather than for any one of them.
   add_launch_test(test/test_amelioration_behaviour.py TIMEOUT 600
+    ENV ROS_DOMAIN_ID=75
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
 
   # A node that has never been given a map, and one that has never been given a
   # scan. Neither state can be recovered once one has arrived, so these cases
   # need a node of their own rather than a share of the one above.
   add_launch_test(test/test_amelioration_startup.py TIMEOUT 300
+    ENV ROS_DOMAIN_ID=76
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
 
   # Both modes at once, which is the arrangement that would show a collision
   # between them. Nothing is driven; what is asserted is the surface each
   # presents, which is settled entirely at construction.
   add_launch_test(test/test_mode_switch.py TIMEOUT 300
+    ENV ROS_DOMAIN_ID=77
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
 
   # Six misconfigured nodes, each dying on its own and saying which setting
   # killed it. What the class refuses is asserted in a gtest; what an operator
   # sees when it does is asserted here, by running the programme.
   add_launch_test(test/test_refuses_to_start.py TIMEOUT 300
+    ENV ROS_DOMAIN_ID=78
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
 
   foreach(test_target test_fsm_localisation_cbgl_defects test_fsm_localisation_core
