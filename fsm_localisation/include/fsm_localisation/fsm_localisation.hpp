@@ -78,6 +78,22 @@ struct Parameters
    *  in proportion to the square of the ray count, and where a room turns back
    *  on itself it can return a wall standing behind the nearest one. */
   std::string ray_search{"angular"};
+
+  /** Ported from the scan-to-map matcher, each defaulting off so the
+   *  matcher's behaviour is unchanged while every one of the three is off. */
+
+  /** Once the rotation criterion passes 0.99999, jump straight to the
+   *  maximum magnification. Fires at most once per match. */
+  bool enforce_early_gearup{false};
+
+  /** The translation stage abandons a candidate that has moved further than
+   *  `xy_bound + 0.01` on either axis from where the stage started, and
+   *  treats it as a failure. */
+  bool enforce_translation_bound{false};
+
+  /** When every candidate angle fails its trial translation, trigger a
+   *  recovery rather than proceed with the angle of a failed candidate. */
+  bool recover_on_failed_sift{false};
 };
 
 /**

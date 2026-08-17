@@ -21,10 +21,12 @@
 #define FSM_H
 
 #include <algorithm>
+#include <bit>
 #include <cassert>
 #include <chrono>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -158,6 +160,14 @@ struct RotationOutput
  * caller judges the correction, the pose it settled on, how many iterations it
  * took, and the time spent finding ray intersections, which the caller
  * accumulates across both stages.
+ *
+ * out_of_map carries the fact that the pose left the map's bounds mid pass.
+ * criterion is set to a sentinel, -2.0, in that case, but criterion is
+ * otherwise an average of per ray differences that is itself not a number
+ * whenever the pose it was computed from is, so a caller comparing criterion
+ * against that sentinel can be fooled by a bad pose into believing the map
+ * was left when it was not. out_of_map is set once, alongside the sentinel,
+ * and is what a caller should read instead.
  */
 struct TranslationOutput
 {
@@ -165,6 +175,7 @@ struct TranslationOutput
   Pose pose;
   int iterations{0};
   std::chrono::duration<double> intersections_time{};
+  bool out_of_map{false};
 };
 /* ========================================================================== */
 /*
@@ -241,6 +252,118 @@ enum class RaySearch
   windowed
 };
 /* ========================================================================== */
+/*
+ * The abstract interface an occupancy grid satisfies, so that the core can
+ * cast a ray into one without knowing what one is. Two questions only:
+ * whether a world position is free, and what range each of a pose's rays
+ * meets. Nothing ever owns a `GridReference` through this base, which is why
+ * its destructor is protected rather than public and virtual: if a derived
+ * type is later found to need owning through the base, that is a deliberate
+ * one line change and not something that happens by accident.
+ */
+class GridReference
+{
+  public:
+
+  virtual bool isFree(const double x, const double y) const noexcept = 0;
+
+  /*
+   * The ray angle contract, read out of `X::findExactAngular` and written
+   * here so both sides of the module boundary carry the same formula rather
+   * than the same sentence. Ray `i` of `num_rays` leaves at:
+   *
+   *   t_ray = i * 2*M_PI / num_rays + pose.t - M_PI
+   *   t_ray = fmod(t_ray + 5*M_PI, 2*M_PI) - M_PI
+   *
+   * so ray zero points behind the pose, not along it. An implementation
+   * casting into a grid computes each ray's heading with that same
+   * expression, written the same way, before converting it into whatever
+   * frame its own caster expects.
+   */
+  virtual std::vector<double> ranges(
+    const Pose& pose,
+    const unsigned int num_rays,
+    const double max_range) const = 0;
+
+  protected:
+
+  GridReference() = default;
+  GridReference(const GridReference&) = default;
+  GridReference(GridReference&&) = default;
+  GridReference& operator=(const GridReference&) = default;
+  GridReference& operator=(GridReference&&) = default;
+  ~GridReference() = default;
+};
+/* ========================================================================== */
+/*
+ * A non-owning handle standing for "the thing rays are cast into": either the
+ * ring of points the odometry mode has always built, or an occupancy grid
+ * behind `GridReference`, together with the maximum range to report for a ray
+ * that meets neither. At most one of the two pointers is ever non-null, and
+ * which one is non-null is the discriminator.
+ *
+ * The ring constructor is deliberately not `explicit`, so that a `const
+ * std::vector< std::pair<double,double> >&` converts to a `Reference` at
+ * every existing call site with no edit needed there.
+ *
+ * A `Reference` borrows and must not outlive whatever it points at. It is
+ * passed by value, is trivially copyable, and every one of its operations is
+ * `noexcept`. Default constructed, or holding nothing, `isRing()` and
+ * `isGrid()` both return `false`; `grid()`, `maxRange()` and `ring()` each
+ * assert, and with `NDEBUG` defined are undefined behaviour, which matches
+ * how the rest of this file treats a programmer error.
+ */
+class Reference
+{
+  public:
+
+  Reference() noexcept = default;
+
+  Reference(const std::vector< std::pair<double,double> >& ring) noexcept
+  : ring_(&ring)
+  {
+  }
+
+  Reference(const GridReference& grid, const double max_range) noexcept
+  : grid_(&grid), max_range_(max_range)
+  {
+  }
+
+  const GridReference& grid() const noexcept
+  {
+    assert(grid_ != nullptr);
+    return *grid_;
+  }
+
+  bool isGrid() const noexcept
+  {
+    return grid_ != nullptr;
+  }
+
+  bool isRing() const noexcept
+  {
+    return ring_ != nullptr;
+  }
+
+  double maxRange() const noexcept
+  {
+    assert(grid_ != nullptr);
+    return max_range_;
+  }
+
+  const std::vector< std::pair<double,double> >& ring() const noexcept
+  {
+    assert(ring_ != nullptr);
+    return *ring_;
+  }
+
+  private:
+
+  const std::vector< std::pair<double,double> >* ring_ = nullptr;
+  const GridReference* grid_ = nullptr;
+  double max_range_ = 0.0;
+};
+/* ========================================================================== */
 struct input_params
 {
   unsigned int num_iterations;
@@ -256,6 +379,24 @@ struct input_params
   unsigned int rng_seed;
 
   RaySearch ray_search{RaySearch::angular};
+
+  /*
+   * Three behaviours ported from the scan-to-map matcher, each defaulting
+   * off so that with every one off the odometry mode is unchanged.
+   */
+
+  /* Once the rotation criterion passes 0.99999, jump straight to the maximum
+   * magnification. Fires at most once per match. */
+  bool enforce_early_gearup{false};
+
+  /* The translation stage abandons a candidate that has moved further than
+   * `xy_bound + 0.01` on either axis from where the stage started, and
+   * treats it as a failure. */
+  bool enforce_translation_bound{false};
+
+  /* When every candidate angle fails its trial translation, trigger a
+   * recovery rather than proceed with the angle of a failed candidate. */
+  bool recover_on_failed_sift{false};
 };
 /* ========================================================================== */
 struct output_params
@@ -361,10 +502,15 @@ class X
   */
   static std::vector< std::pair<double,double> > find(
     const Pose& pose,
-    const std::vector< std::pair<double, double> >& lines,
+    const Reference reference,
     const unsigned int& num_rays,
     const RaySearch ray_search)
   {
+    if (reference.isGrid())
+      return findGrid(pose, reference.grid(), num_rays, reference.maxRange());
+
+    const std::vector< std::pair<double, double> >& lines = reference.ring();
+
     return ray_search == RaySearch::windowed
       ? findExactWindowed(pose, lines, num_rays)
       : findExactAngular(pose, lines, num_rays);
@@ -879,6 +1025,38 @@ class X
   }
 
   /*****************************************************************************
+   * Casts `num_rays` rays from `pose` into `grid` and places each returned
+   * range on its own ray, so the grid answers the same question the ring
+   * does: a point per ray, at the range the caster found.
+   *
+   * Ray `i`'s heading follows the same convention `X::findExactAngular` casts
+   * by, read out of that function rather than restated in prose, so that a
+   * point returned here lands where a caller expects it to.
+   */
+  static std::vector< std::pair<double,double> > findGrid(
+    const Pose& pose,
+    const GridReference& grid,
+    const unsigned int& num_rays,
+    const double max_range)
+  {
+    const std::vector<double> scan_ranges = grid.ranges(pose, num_rays, max_range);
+
+    std::vector< std::pair<double,double> > intersections(num_rays);
+
+    for (unsigned int i = 0; i < num_rays; i++)
+    {
+      double t_ray = i * 2*M_PI / num_rays + pose.t - M_PI;
+      t_ray = fmod(t_ray + 5*M_PI, 2*M_PI) - M_PI;
+
+      intersections[i] = std::make_pair(
+        pose.x + scan_ranges[i] * cos(t_ray),
+        pose.y + scan_ranges[i] * sin(t_ray));
+    }
+
+    return intersections;
+  }
+
+  /*****************************************************************************
    * Where one ray meets one wall, if it meets it at all.
    *
    * The ray is handed over as the point it leaves from and a second point a
@@ -1106,11 +1284,59 @@ class Utils
   */
   static std::optional<Pose> generatePose(
     const Pose& base_pose,
-    const std::vector< std::pair<double,double> >& map,
+    const Reference reference,
     const double& dxy, const double& dt, const double& dist_threshold,
     const RaySearch ray_search,
     const unsigned int seed = 0)
   {
+    if (reference.isGrid())
+    {
+      if (dist_threshold > 0.0)
+        return std::nullopt;
+
+      assert(dxy >= 0.0);
+      assert(dt >= 0.0);
+
+      std::mt19937& generator_x = randomEngine(seed);
+      std::mt19937& generator_y = generator_x;
+      std::mt19937& generator_t = generator_x;
+
+      std::uniform_real_distribution<double> distribution_x(-dxy, dxy);
+      std::uniform_real_distribution<double> distribution_y(-dxy, dxy);
+      std::uniform_real_distribution<double> distribution_t(-dt, dt);
+
+      Pose candidate_pose;
+      const double rt = distribution_t(generator_t);
+      candidate_pose.t = base_pose.t + rt;
+      candidate_pose.t = Utils::wrapAngle(candidate_pose.t);
+
+      /*
+       * A thousand draws is far more than a search that can succeed needs.
+       * Bounding it turns an estimate standing in unmapped or blocked space
+       * into a reported failure rather than a hang with nothing in the log.
+       */
+      constexpr unsigned int max_draws = 1000;
+
+      for (unsigned int draw = 0; draw < max_draws; draw++)
+      {
+        const double rx = distribution_x(generator_x);
+        const double ry = distribution_y(generator_y);
+
+        candidate_pose.x = base_pose.x + rx;
+        candidate_pose.y = base_pose.y + ry;
+
+        if (isPositionInMap(candidate_pose, reference))
+          return candidate_pose;
+      }
+
+      Diagnostics::report(
+        "Utils::generatePose: grid draw bound exhausted, no free position found");
+
+      return std::nullopt;
+    }
+
+    const std::vector< std::pair<double,double> >& map = reference.ring();
+
     assert(dxy >= 0.0);
     assert(dt >= 0.0);
 
@@ -1179,10 +1405,15 @@ class Utils
   /*****************************************************************************
   */
   static std::optional<Pose> generatePoseWithinMap(
-    const std::vector< std::pair<double,double> >& map,
+    const Reference reference,
     const double& dist_threshold,
     const RaySearch ray_search)
   {
+    if (reference.isGrid())
+      return std::nullopt;
+
+    const std::vector< std::pair<double,double> >& map = reference.ring();
+
     /* A temp real pose */
     Pose real_pose_ass;
 
@@ -1349,8 +1580,13 @@ class Utils
   */
   static bool isPositionInMap(
     const Pose& pose,
-    const std::vector< std::pair<double,double> >& map)
+    const Reference reference)
   {
+    if (reference.isGrid())
+      return reference.grid().isFree(pose.x, pose.y);
+
+    const std::vector< std::pair<double,double> >& map = reference.ring();
+
     const Point_2 point(pose.x, pose.y);
 
     /* Construct polygon from map */
@@ -2741,14 +2977,20 @@ class DFTUtils
     /* The imaginary part of the first coefficient */
     const double x1_i = dft_coeffs[rays_diff.size()-1];
 
+    /*
+     * std::isfinite folds to a constant true under this package's -Ofast
+     * build, so a non finite coefficient would pass straight through
+     * unnoticed. isFinite above reads the bits instead and cannot be folded
+     * away the same manner.
+     */
     /* Is x1_r finite? */
-    if (std::isfinite(x1_r))
+    if (isFinite(x1_r))
       dft_coeff_vector.push_back(x1_r);
     else
       dft_coeff_vector.push_back(0.0);
 
     /* Is x1_i finite? */
-    if (std::isfinite(x1_i))
+    if (isFinite(x1_i))
       dft_coeff_vector.push_back(x1_i);
     else
       dft_coeff_vector.push_back(0.0);
@@ -2795,14 +3037,20 @@ class DFTUtils
     /* The imaginary part of the first coefficient */
     const double x1_i = dft_coeffs[rays_diff.size()-1];
 
+    /*
+     * std::isfinite folds to a constant true under this package's -Ofast
+     * build, so a non finite coefficient would pass straight through
+     * unnoticed. isFinite above reads the bits instead and cannot be folded
+     * away the same manner.
+     */
     /* Is x1_r finite? */
-    if (std::isfinite(x1_r))
+    if (isFinite(x1_r))
       dft_coeff_vector.push_back(x1_r);
     else
       dft_coeff_vector.push_back(0.0);
 
     /* Is x1_i finite? */
-    if (std::isfinite(x1_i))
+    if (isFinite(x1_i))
       dft_coeff_vector.push_back(x1_i);
     else
       dft_coeff_vector.push_back(0.0);
@@ -3006,6 +3254,27 @@ class DFTUtils
     plans.emplace(size, plan);
     return plan;
   }
+
+  /*****************************************************************************
+   * This package builds under -Ofast, which implies -ffinite-math-only. Under
+   * that setting the compiler is entitled to assume that no infinity or
+   * not-a-number value ever occurs, so it is free to fold a call to
+   * std::isfinite down to a constant true. The checks further down this class
+   * exist to catch a non finite Fourier coefficient, so they cannot rely on a
+   * call the optimiser is allowed to erase; the exponent bits are read
+   * directly instead, following the reasoning already applied to
+   * isValidRange in fsm_localisation.cpp for exactly this reason.
+   * @brief Returns whether value holds neither infinity nor not-a-number.
+   * @param[in] value [const double] The value to test.
+   * @return [bool] True when value is finite.
+   */
+  static bool isFinite(const double value)
+  {
+    const std::uint64_t bits = std::bit_cast<std::uint64_t>(value);
+    const std::uint64_t exponent = (bits >> 52) & 0x7FFU;
+
+    return exponent != 0x7FFU;
+  }
 };
 
 
@@ -3019,12 +3288,13 @@ class Translation
   static TranslationOutput tff(
     const std::span<const double> real_scan,
     const Pose& virtual_pose,
-    const std::vector< std::pair<double,double> >& map,
+    const Reference map,
     const int& max_iterations,
-    [[maybe_unused]] const double& dist_bound,
+    const double& dist_bound,
     const bool& pick_min,
     const fftw_plan& r2rp,
-    const RaySearch ray_search)
+    const RaySearch ray_search,
+    const bool enforce_translation_bound = false)
   {
 #ifdef FSM_LOCALISATION_TRACE
     Diagnostics::report(std::format("input pose  ({:f},{:f},{:f}) [Translation::tff]",
@@ -3115,11 +3385,18 @@ class Translation
       current_pose.x += x_e;
       current_pose.y += y_e;
 
-      [[maybe_unused]] const double dx = current_pose.x - virtual_pose.x;
-      [[maybe_unused]] const double dy = current_pose.y - virtual_pose.y;
+      const double dx = current_pose.x - virtual_pose.x;
+      const double dy = current_pose.y - virtual_pose.y;
 
-      /* Check constraints */
-      if(!Utils::isPositionInMap(current_pose, map))
+      /*
+       * Ported from the scan-to-map matcher: a candidate that has moved
+       * further than `dist_bound + 0.01` on either axis from where the
+       * stage started is a failure, guarded so the check only fires when
+       * asked for.
+       */
+      if(!Utils::isPositionInMap(current_pose, map) ||
+        (enforce_translation_bound &&
+          (fabs(dx) > dist_bound + 0.01 || fabs(dy) > dist_bound + 0.01)))
       {
 #ifdef FSM_LOCALISATION_TRACE
         Diagnostics::report("OUT OF BOUNDS");
@@ -3128,6 +3405,7 @@ class Translation
         output.iterations = it;
         output.pose = current_pose;
         output.criterion = -2.0;
+        output.out_of_map = true;
         return output;
       }
 
@@ -3292,7 +3570,7 @@ public:
   static RotationOutput fmt(
     const std::span<const double> real_scan,
     const Pose& virtual_pose,
-    const std::vector< std::pair<double,double> >& map,
+    const Reference map,
     const unsigned int& magnification_size,
     const std::string& batch_or_sequential,
     const fftw_plan& r2rp, const fftw_plan& c2rp,
@@ -3630,7 +3908,7 @@ public:
   static RotationOutput fmt2Batch(
     const std::span<const double> real_scan,
     const Pose& virtual_pose,
-    const std::vector< std::pair<double,double> >& map,
+    const Reference map,
     const unsigned int& magnification_size,
     const fftw_plan& r2rp, const fftw_plan& c2rp,
     const RaySearch ray_search)
@@ -3755,7 +4033,7 @@ public:
   static RotationOutput fmt2Sequential(
     const std::span<const double> real_scan,
     const Pose& virtual_pose,
-    const std::vector< std::pair<double,double> >& map,
+    const Reference map,
     const unsigned int& magnification_size,
     const RaySearch ray_search)
   {
@@ -4064,10 +4342,10 @@ class Match
 
   /*****************************************************************************
   */
-  static MatchOutput fmtdbh(
+  static MatchOutput fmt(
     const std::span<const double> real_scan,
     const Pose& virtual_pose,
-    const std::vector< std::pair<double,double> >& map,
+    const Reference map,
     const fftw_plan& r2rp, const fftw_plan& c2rp,
     const input_params& ip)
   {
@@ -4117,8 +4395,24 @@ class Match
     double best_cand_angle = 0.0;
     double best_min_tc = 100000.0;
 
+    /*
+     * `best_cand_angle`'s own rotation criteria, carried alongside it. `rc0`
+     * and `rc1` hold one entry per angle the rotation stage returned this
+     * iteration, and a carried-over `best_cand_angle` is not one of them, so
+     * neither vector has an entry that belongs to it. What does belong to it
+     * is the pair recorded here whenever it is set below, which is the one
+     * moment it is a genuine member of the rotation stage's own output.
+     * Before that has ever happened the pair cannot mean anything and holds
+     * -2.0, the sentinel this function already uses elsewhere for "not a real
+     * reading", which lies outside the range either quantity can take and so
+     * cannot be mistaken for one, in particular by `enforce_early_gearup`'s
+     * `> 0.99999` test.
+     */
+    double best_cand_rc0 = -2.0;
+    double best_cand_rc1 = -2.0;
+
     /* A lock for going overdrive when the rotation criterion is near-excellent */
-    [[maybe_unused]] const bool up_lock = false;
+    bool up_lock = false;
     int total_iterations = 0;
     int num_iterations = 0;
 
@@ -4173,9 +4467,11 @@ class Match
 
       /* ---------------- Candidate angles sifting -------------------------- */
       unsigned int min_tc_idx = 0;
+      bool all_candidates_failed = false;
       if (cand_angles.size() > 1)
       {
         std::vector<double> tcs_sift;
+        std::vector<bool> tcs_sift_out_of_map;
         for (unsigned int ca = 0; ca < cand_angles.size(); ca++)
         {
           /* How many test iterations? */
@@ -4192,7 +4488,8 @@ class Match
 
           const TranslationOutput translation_output =
             Translation::tff(real_scan, cand_pose, map,
-              ni, ip.xy_bound, false, r2rp, ip.ray_search);
+              ni, ip.xy_bound, false, r2rp, ip.ray_search,
+              ip.enforce_translation_bound);
 
           const double tc = translation_output.criterion;
           tr_i = translation_output.iterations;
@@ -4212,10 +4509,11 @@ class Match
           op->translation_iterations += tr_i;
 #endif
 
-          if (tc == -2.0)
+          if (translation_output.out_of_map)
             tcs_sift.push_back(1000000.0);
           else
             tcs_sift.push_back(tc);
+          tcs_sift_out_of_map.push_back(translation_output.out_of_map);
         }
 
         /* The index of the angle with the least translation criterion */
@@ -4230,104 +4528,153 @@ class Match
         {
           best_min_tc = tcs_sift[min_tc_idx];
           best_cand_angle = cand_angles[min_tc_idx];
+
+          /* A genuine rotation candidate carries its own `rc0`/`rc1`; when
+           * the winner is instead the carried-over angle appended below,
+           * `cand_angles[min_tc_idx]` is `best_cand_angle` already and the
+           * pair recorded for it last time still applies. */
+          if (min_tc_idx < rc0.size())
+          {
+            best_cand_rc0 = rc0[min_tc_idx];
+            best_cand_rc1 = rc1[min_tc_idx];
+          }
         }
+
+        all_candidates_failed = tcs_sift_out_of_map[min_tc_idx];
       }
 
-      rc0_v.push_back(rc0[min_tc_idx]);
-      rc1_v.push_back(rc1[min_tc_idx]);
-
       /*
-       * Update the current orientation estimate with the angle that sports the
-       * least translation criterion overall
+       * Ported from the scan-to-map matcher: when every candidate angle has
+       * failed its trial translation the sift has nothing to offer, and a
+       * recovery is triggered here rather than proceeding with the angle of
+       * a failed candidate.
        */
-      result_pose->t += cand_angles[min_tc_idx];
-      result_pose->t = Utils::wrapAngle(result_pose->t);
+      bool l2_recovery = ip.recover_on_failed_sift && all_candidates_failed;
 
-      /* ... and store it */
-      ts.push_back(result_pose->t);
-
-      /*
-       * ---------------- Translation correction phase -------------------------
-       */
-      num_iterations =
-        (current_magnification_size+1)*ip.num_iterations;
-
-      [[maybe_unused]] int tr_iterations = -1;
-      [[maybe_unused]] const double int_time_trans = 0.0;
-
-#ifdef FSM_LOCALISATION_TRACE
-      std::chrono::high_resolution_clock::time_point start_translation =
-        std::chrono::high_resolution_clock::now();
-#endif
-
-      const TranslationOutput translation_output = Translation::tff(real_scan,
-        *result_pose, map, num_iterations, ip.xy_bound, true, r2rp,
-        ip.ray_search);
-
-      const double trans_criterion = translation_output.criterion;
-      tr_iterations = translation_output.iterations;
-      intersections_time = translation_output.intersections_time;
-      *result_pose = translation_output.pose;
-
-#ifdef FSM_LOCALISATION_TRACE
-      std::chrono::high_resolution_clock::time_point end_translation =
-        std::chrono::high_resolution_clock::now();
-
-      op->translation_times += std::chrono::duration_cast<
-        std::chrono::duration<double> >(end_translation-start_translation).count();
-
-      op->intersections_times += intersections_time.count();
-#endif
-
-#ifdef FSM_LOCALISATION_TRACE
-      op->translation_iterations += tr_iterations;
-#endif
-
-      tc_v.push_back(trans_criterion);
-
-#ifdef FSM_LOCALISATION_TRACE
-      Diagnostics::report(std::format("rc0 = {:f}",
-        rc0_v.back()));
-      Diagnostics::report(std::format("rc1 = {:f}",
-        rc1_v.back()));
-      Diagnostics::report(std::format("tc  = {:f}",
-        tc_v.back()));
-#endif
-
-      xs.push_back(result_pose->x);
-      ys.push_back(result_pose->y);
-
-#ifdef FSM_LOCALISATION_TRACE
-      Pose traj_i;
-      traj_i.x = xs.back();
-      traj_i.y = ys.back();
-      traj_i.t = ts.back();
-      op->trajectory.push_back(traj_i);
-#endif
-
-
-      /* --------------------- Recovery modes ------------------------------- */
-      bool l2_recovery = false;
-
-      /* Perilous pose at exterior of map's bounds detected */
-      if (tc_v.back() == -2.0)
+      if (!l2_recovery)
       {
-#ifdef FSM_LOCALISATION_TRACE
-        Diagnostics::report("Will trigger recovery due to condition 0");
-#endif
-        l2_recovery = true;
-      }
+        /*
+         * `min_tc_idx` indexes `cand_angles`, which carries the rotation
+         * stage's own candidates plus `best_cand_angle`, appended above when
+         * it was not already among them. `rc0` and `rc1` carry only the
+         * former: one entry per angle the rotation stage returned, with no
+         * entry for the appended one. Reading `rc0[min_tc_idx]` and
+         * `rc1[min_tc_idx]` unconditionally therefore read one past the end
+         * of both vectors whenever the appended, carried-over angle wins the
+         * sift, which happens whenever the previous best beats every angle
+         * found this iteration: undefined behaviour that a release build
+         * does not catch, and that then flows into the reported rotation
+         * criterion and into `enforce_early_gearup`'s own condition.
+         *
+         * What belongs to a carried-over angle is the rotation criterion it
+         * earned when it was itself a genuine rotation candidate, which is
+         * exactly what `best_cand_rc0`/`best_cand_rc1` hold, kept in step
+         * with `best_cand_angle` above. Reading from `rc0`/`rc1` only when
+         * `min_tc_idx` is a genuine index into them, and from the carried
+         * pair otherwise, records a real measurement either way.
+         */
+        if (min_tc_idx < rc0.size())
+        {
+          rc0_v.push_back(rc0[min_tc_idx]);
+          rc1_v.push_back(rc1[min_tc_idx]);
+        }
+        else
+        {
+          rc0_v.push_back(best_cand_rc0);
+          rc1_v.push_back(best_cand_rc1);
+        }
 
-      /* Do not allow more than `max_counter` iterations per resolution */
-      if (counter > max_counter)
-      {
-#ifdef FSM_LOCALISATION_TRACE
-        Diagnostics::report("Will trigger recovery due to condition 4");
-#endif
-        /* l2_recovery = true; */
+        /*
+         * Update the current orientation estimate with the angle that sports the
+         * least translation criterion overall
+         */
+        result_pose->t += cand_angles[min_tc_idx];
+        result_pose->t = Utils::wrapAngle(result_pose->t);
 
-        counter = 0;
-        current_magnification_size++;
+        /* ... and store it */
+        ts.push_back(result_pose->t);
+
+        /*
+         * ---------------- Translation correction phase -------------------------
+         */
+        num_iterations =
+          (current_magnification_size+1)*ip.num_iterations;
+
+        [[maybe_unused]] int tr_iterations = -1;
+        [[maybe_unused]] const double int_time_trans = 0.0;
+
+#ifdef FSM_LOCALISATION_TRACE
+        std::chrono::high_resolution_clock::time_point start_translation =
+          std::chrono::high_resolution_clock::now();
+#endif
+
+        const TranslationOutput translation_output = Translation::tff(real_scan,
+          *result_pose, map, num_iterations, ip.xy_bound, true, r2rp,
+          ip.ray_search, ip.enforce_translation_bound);
+
+        const double trans_criterion = translation_output.criterion;
+        tr_iterations = translation_output.iterations;
+        intersections_time = translation_output.intersections_time;
+        *result_pose = translation_output.pose;
+
+#ifdef FSM_LOCALISATION_TRACE
+        std::chrono::high_resolution_clock::time_point end_translation =
+          std::chrono::high_resolution_clock::now();
+
+        op->translation_times += std::chrono::duration_cast<
+          std::chrono::duration<double> >(end_translation-start_translation).count();
+
+        op->intersections_times += intersections_time.count();
+#endif
+
+#ifdef FSM_LOCALISATION_TRACE
+        op->translation_iterations += tr_iterations;
+#endif
+
+        tc_v.push_back(trans_criterion);
+
+#ifdef FSM_LOCALISATION_TRACE
+        Diagnostics::report(std::format("rc0 = {:f}",
+          rc0_v.back()));
+        Diagnostics::report(std::format("rc1 = {:f}",
+          rc1_v.back()));
+        Diagnostics::report(std::format("tc  = {:f}",
+          tc_v.back()));
+#endif
+
+        xs.push_back(result_pose->x);
+        ys.push_back(result_pose->y);
+
+#ifdef FSM_LOCALISATION_TRACE
+        Pose traj_i;
+        traj_i.x = xs.back();
+        traj_i.y = ys.back();
+        traj_i.t = ts.back();
+        op->trajectory.push_back(traj_i);
+#endif
+
+        /* --------------------- Recovery modes ------------------------------- */
+
+        /* Perilous pose at exterior of map's bounds detected */
+        if (translation_output.out_of_map)
+        {
+#ifdef FSM_LOCALISATION_TRACE
+          Diagnostics::report("Will trigger recovery due to condition 0");
+#endif
+          l2_recovery = true;
+        }
+
+        /* Do not allow more than `max_counter` iterations per resolution */
+        if (counter > max_counter)
+        {
+#ifdef FSM_LOCALISATION_TRACE
+          Diagnostics::report("Will trigger recovery due to condition 4");
+#endif
+          /* l2_recovery = true; */
+
+          counter = 0;
+          current_magnification_size++;
+        }
       }
 
 
@@ -4360,6 +4707,12 @@ class Match
         {
           current_magnification_size += 1;
           counter = 0;
+
+          if (ip.enforce_early_gearup && rc0_v.back() > 0.99999 && !up_lock)
+          {
+            current_magnification_size = max_magnification_size;
+            up_lock = true;
+          }
         }
       }
 
@@ -4378,8 +4731,23 @@ class Match
 #endif
 
     op->exec_time = elapsed.count();
-    op->rc = rc0_v.back();
-    op->tc = tc_v.back();
+
+    /*
+     * With `recover_on_failed_sift` on, an iteration whose sift fails skips
+     * the block above that fills `rc0_v`, `rc1_v` and `tc_v`, and triggers a
+     * recovery instead. When every iteration fails this way, which is what
+     * happens when the estimate starts outside the map and the recovery
+     * cannot find free space to draw a new one from, the loop exits on
+     * exhausted recoveries having never filled any of the three: reading
+     * `.back()` on an empty vector is undefined behaviour, and asserts under
+     * `_GLIBCXX_ASSERTIONS`. A match that never completed a single iteration
+     * has no rotation or translation criterion to report, so -2.0 is
+     * reported instead, the sentinel this function already uses elsewhere
+     * for "not a real reading" and so cannot be mistaken for one.
+     */
+    op->rc = rc0_v.empty() ? -2.0 : rc0_v.back();
+    op->tc = tc_v.empty() ? -2.0 : tc_v.back();
+
     op->num_recoveries = num_recoveries;
 #ifdef FSM_LOCALISATION_TRACE
     op->rotation_iterations = total_iterations;
@@ -4392,7 +4760,7 @@ class Match
   */
   static Pose l2recovery(
     const Pose& input_pose,
-    const std::vector< std::pair<double,double> >& map,
+    const Reference map,
     const double& xy_bound, const double& t_bound,
     const RaySearch ray_search,
     const unsigned int seed = 0)
@@ -4403,6 +4771,35 @@ class Match
     Diagnostics::report("Level 2 recovery mode activated");
     Diagnostics::report("*********************************");
 #endif
+
+    if (map.isGrid())
+    {
+      /*
+       * `Utils::generatePose`'s own draw loop is already bounded, so a
+       * handful of attempts here is enough to turn its repeated refusal into
+       * a reported failure rather than an unbounded spin on an estimate that
+       * has wandered into unmapped or blocked space mid match.
+       */
+      constexpr unsigned int max_attempts = 10;
+
+      std::optional<Pose> output_pose;
+      for (unsigned int attempt = 0;
+        attempt < max_attempts && !output_pose;
+        attempt++)
+      {
+        output_pose = Utils::generatePose(input_pose, map,
+          1*xy_bound, t_bound, 0.0, ray_search, seed);
+      }
+
+      if (output_pose)
+        return *output_pose;
+
+      Diagnostics::report(
+        "Match::l2recovery: attempt bound exhausted, no free position found, "
+        "returning the input pose unchanged");
+
+      return input_pose;
+    }
 
     std::optional<Pose> output_pose;
     while (!(output_pose = Utils::generatePose(input_pose, map,
