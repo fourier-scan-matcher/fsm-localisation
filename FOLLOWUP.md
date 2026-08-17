@@ -380,6 +380,23 @@ the operator with an error on every shell opened.
 `bashrc_base` itself was left alone. Replacing it with something minimal is the
 right thing and is a decision about what the shipped container is for.
 
+### The image build has three network fetches and none of them retries
+
+`rosdep init`, `rosdep update` and the lookup that finds the current ROS apt
+source release all reach the network, and each is a bare command in its own
+layer. Any one of them failing fails the build, with a Python traceback rather
+than a sentence.
+
+They are normally invisible because the layers cache. Clearing the build cache
+and rebuilding twice in an afternoon is enough to be rate limited by
+`raw.githubusercontent.com`, which answers 429, which `rosdep init` reports as a
+read timeout. Nothing about the package is wrong when that happens and nothing
+in the output says so.
+
+A retry with a short backoff around each of the three would close it. Left
+because it is a change to a file inherited verbatim and the failure is loud
+rather than silent.
+
 ### The container cannot be told to run the node
 
 Its main process is a shell. The entrypoint drops from root to the container's
