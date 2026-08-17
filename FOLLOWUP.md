@@ -374,28 +374,42 @@ family's history it produced two real defects once run.
 Two faults in the ROS half of it were found by the smoke run of this package's
 own container and fixed: it looked for the workspace under `/home/$USER`, which
 the entrypoint's drop from root leaves unset so the path collapsed to `/home/`
-and no shell had the workspace on it, and three unguarded conveniences greeted
-the operator with an error on every shell opened.
+and no shell had the workspace on it, and three conveniences named paths that no
+longer exist on this release, so each greeted the operator with an error on every
+shell opened. The completer lost its version suffix upstream and `colcon_cd.sh`
+moved to `/etc/profile.d/`; the predecessor package had already diagnosed both
+and this file now carries its wording, so the two do not drift.
+
+The predecessor carried all three of the same container faults: the
+`/home/$USER` path, the chown of the two shared directories, and the deletion and
+refetch of the rosdep sources list. All three have been ported back to it and
+committed there, the path fix proved the same way it was proved here.
 
 `bashrc_base` itself was left alone. Replacing it with something minimal is the
 right thing and is a decision about what the shipped container is for.
 
-### The image build has three network fetches and none of them retries
+### The image build has two network fetches and neither retries
 
-`rosdep init`, `rosdep update` and the lookup that finds the current ROS apt
-source release all reach the network, and each is a bare command in its own
-layer. Any one of them failing fails the build, with a Python traceback rather
-than a sentence.
+`rosdep update` and the lookup that finds the current ROS apt source release both
+reach the network, and each is a bare command in its own layer. Either failing
+fails the build, with a Python traceback rather than a sentence.
 
 They are normally invisible because the layers cache. Clearing the build cache
 and rebuilding twice in an afternoon is enough to be rate limited by
-`raw.githubusercontent.com`, which answers 429, which `rosdep init` reports as a
-read timeout. Nothing about the package is wrong when that happens and nothing
-in the output says so.
+`raw.githubusercontent.com`, which answers 429, which rosdep reports as a read
+timeout. Nothing about the package is wrong when that happens and nothing in the
+output says so.
 
-A retry with a short backoff around each of the three would close it. Left
-because it is a change to a file inherited verbatim and the failure is loud
-rather than silent.
+There were three. `rosdep init` is gone: the base image already ships the sources
+list it writes, byte for byte, so deleting that file and fetching an identical
+copy cost a round trip and bought nothing. The two that remain genuinely need the
+network. A retry with a short backoff around each would close it, and is left
+because the failure is loud rather than silent.
+
+No build has run since that step was removed, because the rate limit that exposed
+it is still in force. The removal rests on the base image's own copy of the file,
+read out of it and compared, rather than on a green build. The first build to run
+is what confirms it.
 
 ### The container cannot be told to run the node
 
