@@ -277,12 +277,18 @@ compile if the pin is lost. **Do not append compile options without `SHELL:`**:
 CMake de-duplicates against directory scope and silently reorders, which turned
 finite math back on in a target written to defeat it.
 
-### `isValidRange`'s own arithmetic cannot be pinned by a test
+### `isValidRange` is exercised at exact settings and never as it ships
 
-It is compiled into the library, so a test reaches it through a symbol whose
-settings follow the build option rather than the test's own. Closing that means
-moving it to the header or duplicating it in a test, and both have costs. Left
-open.
+It used to be reached through the shared library, whose arithmetic follows the
+build option rather than the test's own. The suites that force exact arithmetic
+now compile it themselves, so what they measure is what they asked for.
+
+What no test reaches is the function as the package ships it. The one target
+compiled that way, `test_fsm_localisation_finite_guard`, deliberately links
+nothing, and giving it the function would mean a second object library at the
+shipped settings. Since the remedy inside the function is to read the exponent
+bits, which no arithmetic flag can fold, this is a gap in coverage rather than a
+suspected defect.
 
 ### The core header is duplicated in the `fsm` repository
 
@@ -340,20 +346,17 @@ thousand lines of inherited numerical code, which is the riskiest change
 available for no behavioural gain. Every other check `ament_lint_common`
 provides is on.
 
-### The package cannot be compiled against by a downstream consumer
+### A consumer's own arithmetic settings govern the matcher it links
 
-It exports its include directories and its library names but neither its
-dependencies nor its targets, so `find_package(fsm_localisation)` gives a
-consumer nothing usable. Not a regression from this work: the same was true of
-the package this one descends from. It matters the first time anybody wants to
-link against the matcher rather than run the node.
+The package now exports targets a downstream package can link, and nearly all of
+the matcher is in the header, so a consumer compiles those functions itself, at
+its own flags, and its own copies are the ones its calls reach. The figures this
+package publishes were measured at the settings its own `CMakeLists.txt` sets and
+nothing characterises what tolerance holds at any other.
 
-### Which definition of the transform planning helpers survives is down to link order
-
-The library compiles them with one setting while the tests compile the same
-header functions with another, so which definition survives a link is decided by
-link order. It works today and would flip silently under link time optimisation
-or a static link. Not a regression from this work.
+The alternative is to export the arithmetic settings as a usage requirement of
+the exported targets, which imposes them on a consumer that may have its own
+reasons for the settings it chose. Left to the readme to warn about instead.
 
 ### The repository the manifest names does not exist yet
 
@@ -364,29 +367,19 @@ mistake, but it has to be created before any of those three tell the truth. Ther
 is no apt package and no published image either, and the readme no longer claims
 otherwise.
 
-### The container ships a large personal shell profile
+### A third copy of the personal shell profile lives in the proof tree
 
-`docker/bashrc_base` is a 1154 line personal shell configuration, carried across
-from the predecessor and copied into the image. It is not this package's and
-nothing in the package needs it. Shipped into a proof container earlier in this
-family's history it produced two real defects once run.
+`docker/bashrc_base` was an eleven hundred line personal shell configuration,
+carried in from the machine of whoever built the first image in this family and
+shipped to anyone who opened a shell in the image. It has been replaced by fifty
+lines that this package owns, and the predecessor's copy replaced with the same
+fifty.
 
-Two faults in the ROS half of it were found by the smoke run of this package's
-own container and fixed: it looked for the workspace under `/home/$USER`, which
-the entrypoint's drop from root leaves unset so the path collapsed to `/home/`
-and no shell had the workspace on it, and three conveniences named paths that no
-longer exist on this release, so each greeted the operator with an error on every
-shell opened. The completer lost its version suffix upstream and `colcon_cd.sh`
-moved to `/etc/profile.d/`; the predecessor package had already diagnosed both
-and this file now carries its wording, so the two do not drift.
-
-The predecessor carried all three of the same container faults: the
-`/home/$USER` path, the chown of the two shared directories, and the deletion and
-refetch of the rosdep sources list. All three have been ported back to it and
-committed there, the path fix proved the same way it was proved here.
-
-`bashrc_base` itself was left alone. Replacing it with something minimal is the
-right thing and is a decision about what the shipped container is for.
+`fsm-localisation-tests/lyrical/docker/bashrc_base` is still the original. That
+image is a development container rather than a shipped one, and its ROS half
+differs from this package's: it reads `$USER`, which its own Dockerfile sets as
+an environment variable, where the two package containers read `${HOME}`. The
+three files cannot simply be made one without settling that difference first.
 
 ### The image build has two network fetches and neither retries
 
@@ -406,10 +399,13 @@ copy cost a round trip and bought nothing. The two that remain genuinely need th
 network. A retry with a short backoff around each would close it, and is left
 because the failure is loud rather than silent.
 
-No build has run since that step was removed, because the rate limit that exposed
-it is still in force. The removal rests on the base image's own copy of the file,
-read out of it and compared, rather than on a green build. The first build to run
-is what confirms it.
+A build has since run and the removal holds: the image carries the sources list
+the base image ships, byte for byte the file the deleted step used to fetch.
+
+What that build predates is the shell profile this package now carries and the
+two comment blocks removed from the entrypoint beside it. Both were proved by
+mounting the new file into the built image over its own copy, and neither has
+been through an image build.
 
 ### The container cannot be told to run the node
 
@@ -427,16 +423,19 @@ entrypoint, which is a small change to a file inherited verbatim from an
 upstream project and was left for a decision about what the shipped container is
 for.
 
-### The entrypoint refers to bind mounts the compose file does not declare
-
-`docker/entrypointd.sh` carries comments about `docker-compose.yml:volumes`
-mounting the workspace source and an X authority file. The compose file mounts
-neither, and the image ships a workspace built at image build time, so mounting
-the source over it would shadow what was built. The comments are inherited and
-stale. The two shared directories the entrypoint hands to the container's user
-are mounted.
-
 ## Proofs and comparisons
+
+### The launch tests cannot be run alongside each other
+
+Each of the seven launch test files starts its own node, and they use the same
+node names and the same topic names in one DDS domain. A case that asserts a
+node has published nothing yet therefore sees whatever another test's started
+node published. Measured on a four core machine: run in parallel, twenty four of
+the thirty one cases fail on that alone; run one at a time, all thirty one pass.
+
+Closing it means giving each launch test a domain of its own, or a namespace of
+its own for every node it starts. Until then the suite has to be run serially,
+with `ctest -j1` or the equivalent, and nothing says so.
 
 ### The comparison harness does not assert that recovery stayed quiet
 
