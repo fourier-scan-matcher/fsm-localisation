@@ -61,7 +61,7 @@ Table of Contents
 
 ROS 2 Lyrical and a compiler with C++23 support. Beyond ROS the package needs FFTW3, CGAL and Eigen3. All three are declared in the package manifest, so `rosdep` pulls them in without being asked.
 
-This package is MIT, but the CGAL components it uses are GPL v3. A binary built from these sources therefore carries GPL v3 terms if you redistribute it.
+This package is MIT, but two libraries it links are not. The CGAL components it uses are GPL v3 and FFTW is GPL v2 or later. A binary built from these sources therefore carries GPL v3 terms if you redistribute it.
 
 The vendored ray casting under `include/fsm_localisation/range_libc/` is Apache 2.0 and is governed by the licence file beside it rather than by this package's MIT terms. See [The borrowed ray casting](#the-borrowed-ray-casting).
 

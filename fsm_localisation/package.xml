@@ -6,6 +6,7 @@
   <maintainer email="alexandros.filotheou@gmail.com">Alexandros Filotheou</maintainer>
   <author email="alexandros.filotheou@gmail.com">Alexandros Filotheou</author>
   <license file="LICENSE">MIT</license>
+  <license file="include/fsm_localisation/range_libc/LICENSE">Apache-2.0</license>
 
   <url type="repository">https://github.com/fourier-scan-matcher/fsm-localisation</url>
   <url type="bugtracker">https://github.com/fourier-scan-matcher/fsm-localisation/issues</url>
@@ -23,7 +24,8 @@
   <depend>eigen</depend>
   <depend>cgal</depend>
   <depend>libfftw3</depend>
-  <depend>pkg-config</depend>
+  <buildtool_depend>pkg-config</buildtool_depend>
+  <buildtool_export_depend>pkg-config</buildtool_export_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
