@@ -86,6 +86,8 @@ docker compose -f docker/docker-compose.yml build \
 
 `EXACT_FP=ON` forbids the compiler from reassociating floating point arithmetic, so two compilers give comparable numbers. `DETERMINISTIC_FFT=ON` makes FFTW pick its plan by heuristic rather than by timing itself, so two runs of one binary give the same numbers. Both cost speed. Turn them on to compare builds, not to run a robot.
 
+**Whoever builds this package settles the arithmetic for everything above it.** The choice is recorded where a dependent package reads it, so a package built against this one follows it rather than making its own. See [As a dependency of your own package](#as-a-dependency-of-your-own-package).
+
 `docker/shared-input` and `docker/shared-output` on the host are mounted into the container, for feeding it a recording and taking one back.
 
 ### From source
@@ -114,7 +116,18 @@ target_link_libraries(your_target fsm_localisation::fsm_localisation_core)
 
 Each target carries this package's headers and its own dependencies, so Eigen, CGAL and FFTW3 do not have to be found again on your side.
 
-One thing to know before trusting the numbers. Nearly all of the matcher is in the header, so what governs the arithmetic of what you call is the flags **you** compile with, not the ones this package was built with. The figures quoted here were measured at the settings its own `CMakeLists.txt` sets, and the tolerance you can hold it to at other settings has not been characterised.
+One thing to know before trusting the numbers. Nearly all of the matcher is in the header, so your own compiler flags govern the arithmetic of what you call, not the flags this package was built with. That is a hazard rather than a freedom: two sets of flags over one header put two definitions of one inline function into a single process, and which one survives linking is the linker's choice rather than anybody's intention.
+
+So this package records what it was built with, and a dependent package should follow it rather than choose again:
+
+```cmake
+find_package(fsm_localisation REQUIRED)
+add_compile_options(${FSM_LOCALISATION_BUILT_COMPILE_OPTIONS})
+```
+
+`FSM_LOCALISATION_BUILT_EXACT_FP` is set beside it, true or false, for anything that wants to report the choice rather than follow it. The transform planning choice needs neither: it travels as a compile definition on the exported library targets and reaches your translation units through the link.
+
+The figures quoted here were measured at the settings this package's own `CMakeLists.txt` sets, and the tolerance you can hold it to at other settings has not been characterised.
 
 ## Run
 

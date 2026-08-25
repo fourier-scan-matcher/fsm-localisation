@@ -12,11 +12,19 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(FSM_LOCALISATION_EXACT_FP "Forbid floating point reassociation and contraction" OFF)
 option(FSM_LOCALISATION_DETERMINISTIC_FFT "Select FFTW plans by heuristic, not by timing" OFF)
 
+# The arithmetic, chosen here and recorded for anything that builds against
+# this package. The matcher is a header a dependent package compiles for
+# itself, so two packages compiling it under different arithmetic put two
+# definitions of one inline function into a single process. Whoever builds this
+# package therefore settles the arithmetic for everything above it, and
+# cmake/fsm_localisation-extras.cmake.in is where the choice is written down.
 if(FSM_LOCALISATION_EXACT_FP)
-  add_compile_options(-O2 -fno-fast-math -ffp-contract=off)
+  set(FSM_LOCALISATION_BUILT_COMPILE_OPTIONS -O2 -fno-fast-math -ffp-contract=off)
 else()
-  add_compile_options(-Ofast -fno-finite-math-only)
+  set(FSM_LOCALISATION_BUILT_COMPILE_OPTIONS -Ofast -fno-finite-math-only)
 endif()
+
+add_compile_options(${FSM_LOCALISATION_BUILT_COMPILE_OPTIONS})
 
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -272,4 +280,10 @@ ament_export_dependencies(
   Eigen3
   CGAL)
 
-ament_package(CONFIG_EXTRAS cmake/fsm_localisation-extras.cmake)
+configure_file(
+  cmake/fsm_localisation-extras.cmake.in
+  ${CMAKE_CURRENT_BINARY_DIR}/fsm_localisation-extras.cmake
+  @ONLY)
+
+ament_package(CONFIG_EXTRAS
+  ${CMAKE_CURRENT_BINARY_DIR}/fsm_localisation-extras.cmake)

@@ -338,6 +338,21 @@ explaining why.
 
 ## Build, packaging and containers
 
+### The copyright header of the exported cmake template is no longer checked
+
+The exported cmake file is now a template that records the arithmetic this
+package was built with, so it is `cmake/fsm_localisation-extras.cmake.in` rather
+than `cmake/fsm_localisation-extras.cmake`. The cmake style checker still reads
+it under the new name. The copyright checker does not: it recognises the old
+extension and not the new one, so the file count it reports fell from 37 to 36
+and the licence header of that one file is now unchecked.
+
+The header is present and unchanged. What is lost is the automated check on it,
+one file's worth. Extending the copyright checker's file set means switching off
+the automatic discovery for that one checker and listing the files by hand,
+which is more machinery than the gap is worth. Recorded rather than repaired.
+
+
 ### The two formatting linters are switched off
 
 `ament_cmake_uncrustify` and `ament_cmake_cpplint` impose a brace and wrapping

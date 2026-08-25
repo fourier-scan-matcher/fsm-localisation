@@ -23,3 +23,20 @@ find_package(PkgConfig REQUIRED)
 if(NOT TARGET PkgConfig::FFTW3)
   pkg_check_modules(FFTW3 REQUIRED IMPORTED_TARGET fftw3)
 endif()
+
+# The arithmetic this package was built with, recorded at the moment it was
+# built and read back here by anything that builds against it.
+#
+# It is recorded rather than left implicit because the matcher is a header that
+# a dependent package compiles for itself. Two packages that compile the same
+# header under different arithmetic put two definitions of the same inline
+# function into one process, and which one survives linking is the linker's
+# choice rather than anybody's intention. So the choice belongs to whoever
+# builds this package, and a dependent package follows it rather than making
+# its own.
+#
+# The transform planning choice needs no variable. It travels as a compile
+# definition on the exported library target, so a dependent package inherits it
+# without asking.
+set(FSM_LOCALISATION_BUILT_EXACT_FP @FSM_LOCALISATION_EXACT_FP@)
+set(FSM_LOCALISATION_BUILT_COMPILE_OPTIONS "@FSM_LOCALISATION_BUILT_COMPILE_OPTIONS@")

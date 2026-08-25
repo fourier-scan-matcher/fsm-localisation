@@ -4,6 +4,14 @@ Changelog for package fsm_localisation
 
 Forthcoming
 -----------
+* Records the arithmetic it was built with, where a dependent package reads it.
+  Nearly all of the matcher is in a header, so a dependent package compiles that
+  header for itself. Two arithmetics over one header put two definitions of one
+  inline function into a single process, and which one survives linking is the
+  linker's choice. ``FSM_LOCALISATION_BUILT_COMPILE_OPTIONS`` and
+  ``FSM_LOCALISATION_BUILT_EXACT_FP`` arrive with the package's own cmake
+  configuration, so whoever builds this package settles the arithmetic for
+  everything above it.
 * First release of ``fsm_localisation``. One node with two modes, one matcher
   underneath both. ``odometry`` matches each scan against the one before it and
   reports how far the sensor moved. ``amelioration`` matches a scan against a
