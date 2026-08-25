@@ -4,6 +4,16 @@ Changelog for package fsm_localisation
 
 Forthcoming
 -----------
+* Corrects a defect that answered a narrower sensor confidently and wrongly.
+  ``Corrector::correct`` was never told what the sensor covered, so it read the
+  map over a whole turn and matched it against a measurement covering less of
+  one. That converges rather than failing, so every signal a caller can read
+  said the correction was fine. The map is now read over a whole turn at the
+  sensor's own angular spacing and windowed to what the sensor could have seen.
+  The aperture is a required argument with no default, since a default of a
+  whole turn is what let a caller stay silent and be answered wrongly. The node
+  derives it from the scan and refuses a scan spanning more than a turn, or one
+  not centred on the sensor's heading.
 * Records the arithmetic it was built with, where a dependent package reads it.
   Nearly all of the matcher is in a header, so a dependent package compiles that
   header for itself. Two arithmetics over one header put two definitions of one

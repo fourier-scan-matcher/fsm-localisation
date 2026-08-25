@@ -22,6 +22,8 @@
 
 **Amelioration mode** matches a scan against an occupancy grid and reports where the sensor actually was, correcting a pose estimate somebody else produced.
 
+**A sensor that does not see all the way round is read in amelioration mode.** The map is read over a whole turn at the sensor's own angular spacing and only the part of it the sensor could have seen is compared. The scan has to say what it covers, through `angle_increment` and a ray count, and has to be centred on the sensor's heading; a scan that spans more than a turn, or that begins somewhere else, is refused at the point of use rather than answered wrongly. Odometry mode is unaffected, matching each scan against the one before it at whatever aperture both carry.
+
 <p align="center">
   <img src="https://i.imgur.com/hUsBImy.png">
 </p>

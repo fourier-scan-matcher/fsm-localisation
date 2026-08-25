@@ -145,8 +145,11 @@ Corrector::Corrector(const Parameters& parameters,
 
 std::expected<CorrectionResult, CorrectionError>
 Corrector::correct(std::span<const double> ranges, const Pose& estimate,
-  const double range_max) const
+  const double range_max, const double aperture) const
 {
+  if (!(aperture > 0.0) || aperture > 2.0 * M_PI + 1e-9)
+    return std::unexpected(CorrectionError::aperture_not_a_sensor);
+
   if (ranges.size() < parameters_.size_scan)
     return std::unexpected(CorrectionError::scan_too_short);
 
@@ -163,8 +166,9 @@ Corrector::correct(std::span<const double> ranges, const Pose& estimate,
   if (!scan)
     return std::unexpected(CorrectionError::scan_entirely_invalid);
 
-  const std::vector<double> first_cast =
-    map_->ranges(estimate, match_size, range_max);
+  const std::vector<double> first_cast = map_->ranges(estimate,
+    static_cast<unsigned int>(FSM::panoramicRaysOf(match_size, aperture)),
+    range_max);
 
   if (std::ranges::all_of(first_cast,
       [range_max](const double range) { return range >= range_max; }))
@@ -173,7 +177,8 @@ Corrector::correct(std::span<const double> ranges, const Pose& estimate,
   }
 
   const FSM::MatchOutput match = FSM::Match::fmt(*scan, estimate,
-    FSM::Reference(*map_, range_max), FSM::DFTUtils::forwardPlan(match_size),
+    FSM::Reference(*map_, range_max, aperture),
+    FSM::DFTUtils::forwardPlan(match_size),
     FSM::DFTUtils::inversePlan(match_size), input_parameters);
 
   if (match.op.num_recoveries > parameters_.max_recoveries)

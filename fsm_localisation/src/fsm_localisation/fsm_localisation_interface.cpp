@@ -26,6 +26,7 @@
 #include <cmath>
 #include <cstdint>
 #include <expected>
+#include <format>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -112,6 +113,63 @@ std::optional<double> yawOf(const geometry_msgs::msg::Quaternion& orientation)
   return FSM::Utils::wrapAngle(yaw);
 }
 
+/**
+ * @brief What a scan covers, in radians.
+ * @details Every ray occupies one increment, so the span is the ray count times
+ * the increment rather than the angle between the first ray and the last. The
+ * difference is one increment, and deriving it the other way makes a whole turn
+ * come out at a ray more than the sensor carries whatever the sensor is.
+ */
+double apertureOf(const sensor_msgs::msg::LaserScan& scan)
+{
+  return static_cast<double>(scan.ranges.size()) * scan.angle_increment;
+}
+
+/**
+ * @brief Whether a scan's angles are ones a correction can be made from.
+ * @details A scan spanning less than a whole turn is accepted and the map is
+ * read through the window that sensor could have seen. A scan spanning more
+ * than a turn is refused, because a ray of it would be read twice. A scan whose
+ * first ray does not sit half its own span behind the heading is refused too:
+ * it is a legal scan of another convention and answering it would give a
+ * confident pose rotated by whatever the two conventions differ by.
+ * @return an empty string when the angles can be read, otherwise a sentence
+ * naming the field and the value it carried.
+ */
+std::string anglesProblemOf(const sensor_msgs::msg::LaserScan& scan)
+{
+  const double rays = static_cast<double>(scan.ranges.size());
+  const double increment = scan.angle_increment;
+  const double slack = std::abs(increment) > 0.0
+    ? std::abs(increment) : 2.0 * M_PI / std::max(1.0, rays);
+
+  if (!(increment > 0.0))
+  {
+    return std::format("the scan carries angle_increment {}, which is not a "
+      "spacing rays can be laid out at", increment);
+  }
+
+  const double aperture = rays * increment;
+
+  if (aperture > 2.0 * M_PI + slack)
+  {
+    return std::format("the scan carries {} ranges at angle_increment {}, "
+      "which spans {} radians, more than a full turn. A ray of such a scan "
+      "would be read twice", scan.ranges.size(), increment, aperture);
+  }
+
+  const double expected_min = -0.5 * aperture;
+
+  if (std::abs(FSM::Utils::wrapAngle(scan.angle_min - expected_min)) > slack)
+  {
+    return std::format("the scan carries angle_min {}, where a scan spanning "
+      "{} radians is read as centred on the sensor's heading and therefore as "
+      "beginning at {}", scan.angle_min, aperture, expected_min);
+  }
+
+  return {};
+}
+
 std::string sentenceOf(const CorrectionError error)
 {
   switch (error)
@@ -129,6 +187,9 @@ std::string sentenceOf(const CorrectionError error)
     case CorrectionError::recovery_budget_exhausted:
       return "the match spent its whole recovery budget without settling, "
         "which is what an estimate in unmapped space looks like";
+    case CorrectionError::aperture_not_a_sensor:
+      return "the scan's aperture is not something a sensor can cover: it must "
+        "be more than nothing and no more than one whole turn";
   }
 
   return "the correction failed for an unrecognised reason";
@@ -292,6 +353,9 @@ std::string Interface::correctFrom(
   if (!scan)
     return "no scan has arrived on " + get_parameter("scan_topic").as_string();
 
+  if (const std::string problem = anglesProblemOf(*scan); !problem.empty())
+    return problem;
+
   if (estimate.header.frame_id != global_frame_id_)
   {
     return "the estimate names frame \"" + estimate.header.frame_id
@@ -349,7 +413,8 @@ std::string Interface::correctFrom(
   const std::vector<double> ranges(scan->ranges.begin(), scan->ranges.end());
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector->correct(ranges, estimated_sensor, scan->range_max);
+    corrector->correct(ranges, estimated_sensor, scan->range_max,
+      apertureOf(*scan));
 
   if (!corrected.has_value())
     return sentenceOf(corrected.error());

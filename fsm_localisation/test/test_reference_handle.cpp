@@ -26,13 +26,21 @@
  * threading it through ten call sites left the odometry path unchanged rests
  * on it staying a small, trivially copyable value: register pressure in the
  * arithmetic carrying functions is what the golden fixtures indirectly pin,
- * and a handle that grew a fourth member or stopped being trivially copyable
+ * and a handle that grew another member or stopped being trivially copyable
  * would perturb that with nothing here to say so first. This file is that
  * something.
+ *
+ * It has done its job once. The handle grew a fourth member, the aperture the
+ * grid is to be read through, and this file is what said so. The bound below
+ * moved from three members to four deliberately, and the golden fixtures were
+ * run afterwards to confirm the arithmetic path did not move with it. The
+ * bound is not to be raised again to make a change fit. It is there to make
+ * growth a decision.
  */
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <type_traits>
 #include <utility>
 #include <vector>
@@ -66,7 +74,7 @@ TEST(ReferenceHandle, IsTriviallyCopyable)
 
 TEST(ReferenceHandle, IsSmallEnoughToPassCheaplyByValue)
 {
-  EXPECT_LE(sizeof(FSM::Reference), 24U);
+  EXPECT_LE(sizeof(FSM::Reference), 32U);
 }
 
 TEST(ReferenceHandle, EveryOperationIsNoexcept)
@@ -77,6 +85,8 @@ TEST(ReferenceHandle, EveryOperationIsNoexcept)
   static_assert(noexcept(FSM::Reference{}));
   static_assert(noexcept(FSM::Reference(ring)));
   static_assert(noexcept(FSM::Reference(grid, 0.0)));
+  static_assert(noexcept(FSM::Reference(grid, 0.0, 2.0 * M_PI)));
+  static_assert(noexcept(std::declval<const FSM::Reference&>().aperture()));
   static_assert(noexcept(std::declval<const FSM::Reference&>().isRing()));
   static_assert(noexcept(std::declval<const FSM::Reference&>().isGrid()));
   static_assert(noexcept(std::declval<const FSM::Reference&>().ring()));
@@ -104,6 +114,23 @@ TEST(ReferenceHandle, AHandleHoldingARingReportsRingAndReturnsTheSameRing)
   EXPECT_EQ(&reference.ring(), &ring)
     << "the handle must borrow the ring it was given rather than a copy of "
        "it, since it is not allowed to outlive what it points at";
+}
+
+/**
+ * @brief A grid handle carries the aperture it is to be read through, and a
+ * caller that says nothing gets a whole turn.
+ * @details The whole turn default is what keeps every ring era call site
+ * correct without being touched. It is safe here and is not safe one layer up:
+ * `Corrector::correct` takes the aperture with no default at all, so a caller
+ * with a narrower sensor cannot stay silent and be answered wrongly.
+ */
+TEST(ReferenceHandle, AGridHandleCarriesItsApertureAndDefaultsToAWholeTurn)
+{
+  const StubGrid grid;
+
+  EXPECT_DOUBLE_EQ(FSM::Reference(grid, 10.0).aperture(), 2.0 * M_PI);
+  EXPECT_DOUBLE_EQ(FSM::Reference(grid, 10.0, 1.5 * M_PI).aperture(),
+    1.5 * M_PI);
 }
 
 TEST(ReferenceHandle, AHandleHoldingAGridReportsGridAndReturnsTheSameGridAndMaxRange)

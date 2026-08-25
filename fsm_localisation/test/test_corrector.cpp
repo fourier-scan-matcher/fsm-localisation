@@ -81,6 +81,7 @@ const unsigned int kHeight = 91U;
 const double kResolution = 0.05;
 
 const double kRangeMax = 12.0;
+const double kFullTurn = 2.0 * M_PI;
 
 const unsigned int kNumRays = 360U;
 
@@ -198,6 +199,110 @@ std::vector<double> scanFromTruth(const OccupancyGridMap& map)
   return map.ranges(kTruth, kNumRays, kRangeMax);
 }
 
+/**
+ * @brief What a sensor covering `aperture` would have seen from the truth.
+ * @details The middle window of the panoramic cast, rather than a second cast
+ * at a narrower spacing. A narrower sensor at the same pose sees the same rays
+ * the panoramic one saw, fewer of them, so taking the window is what such a
+ * sensor really reports and casting again would be a different measurement.
+ */
+std::vector<double> narrowScanFromTruth(const OccupancyGridMap& map,
+  const double aperture)
+{
+  const std::vector<double> panoramic = scanFromTruth(map);
+
+  const std::size_t rays = static_cast<std::size_t>(
+    std::llround(kNumRays * aperture / (2.0 * M_PI)));
+
+  const std::size_t prefix = FSM::windowPrefixOf(panoramic.size(), rays);
+
+  return std::vector<double>(panoramic.begin() + prefix,
+    panoramic.begin() + prefix + rays);
+}
+
+}
+
+/**
+ * @brief A sensor covering three quarters of a turn is corrected as well as a
+ * panoramic one.
+ * @details This is the case the corrector answered confidently and wrongly
+ * before it was told what the sensor covers. It read the map over a whole turn
+ * and matched it against three quarters of one, which converges rather than
+ * failing, so nothing anywhere reported a problem: the caller got a pose, the
+ * pose was wrong by metres, and only a comparison against a known truth showed
+ * it. Reinstate the fault and this case fails while every panoramic case above
+ * still passes, which is why the panoramic ones could not have caught it.
+ */
+TEST(Corrector, ASensorCoveringThreeQuartersOfATurnIsPutBack)
+{
+  const std::shared_ptr<const OccupancyGridMap> map = mapOf(roomMessage());
+  ASSERT_NE(map, nullptr);
+
+  const double aperture = 1.5 * M_PI;
+
+  const std::vector<double> scan = narrowScanFromTruth(*map, aperture);
+
+  ASSERT_EQ(scan.size(), 270U);
+
+  Parameters parameters = defaultParameters();
+  parameters.size_scan = scan.size();
+
+  const Corrector corrector(parameters, map);
+
+  const Pose estimate{kTruth.x + 0.11, kTruth.y - 0.09, kTruth.t + 0.08};
+
+  const std::expected<CorrectionResult, CorrectionError> corrected =
+    corrector.correct(scan, estimate, kRangeMax, aperture);
+
+  ASSERT_TRUE(corrected.has_value());
+
+  EXPECT_NEAR(corrected->corrected.x, kTruth.x, kResolution);
+  EXPECT_NEAR(corrected->corrected.y, kTruth.y, kResolution);
+  EXPECT_NEAR(corrected->corrected.t, kTruth.t, headingBound(scan));
+}
+
+/**
+ * @brief An aperture no sensor can cover is refused rather than answered.
+ */
+TEST(Corrector, AnApertureNoSensorCanCoverIsRefused)
+{
+  const std::shared_ptr<const OccupancyGridMap> map = mapOf(roomMessage());
+  ASSERT_NE(map, nullptr);
+
+  const std::vector<double> scan = scanFromTruth(*map);
+
+  const Corrector corrector(defaultParameters(), map);
+
+  for (const double aperture : {0.0, -1.0, 4.0 * M_PI})
+  {
+    const std::expected<CorrectionResult, CorrectionError> corrected =
+      corrector.correct(scan, kTruth, kRangeMax, aperture);
+
+    ASSERT_FALSE(corrected.has_value()) << "aperture " << aperture;
+    EXPECT_EQ(corrected.error(), CorrectionError::aperture_not_a_sensor)
+      << "aperture " << aperture;
+  }
+}
+
+/**
+ * @brief The window arithmetic, pinned at the two apertures that matter.
+ * @details Every place that takes this window has to agree on where it starts
+ * or the rays they align are not the same rays. These are the numbers the sift
+ * of the package above and the harness that shapes a narrower scan also hold.
+ */
+TEST(Corrector, TheWindowArithmeticIsPinned)
+{
+  EXPECT_EQ(FSM::panoramicRaysOf(360U, 2.0 * M_PI), 360U);
+  EXPECT_EQ(FSM::windowPrefixOf(360U, 360U), 0U);
+
+  EXPECT_EQ(FSM::panoramicRaysOf(270U, 1.5 * M_PI), 360U);
+  EXPECT_EQ(FSM::windowPrefixOf(360U, 270U), 45U);
+
+  EXPECT_EQ(FSM::panoramicRaysOf(271U, 1.5 * M_PI), 361U);
+  EXPECT_EQ(FSM::windowPrefixOf(361U, 271U), 45U);
+
+  EXPECT_EQ(FSM::panoramicRaysOf(0U, 1.5 * M_PI), 0U);
+  EXPECT_EQ(FSM::panoramicRaysOf(360U, 0.0), 360U);
 }
 
 TEST(Corrector, AnEstimateDisplacedInPositionIsPutBack)
@@ -212,7 +317,7 @@ TEST(Corrector, AnEstimateDisplacedInPositionIsPutBack)
   const Pose estimate{kTruth.x + 0.11, kTruth.y - 0.09, kTruth.t};
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, estimate, kRangeMax);
+    corrector.correct(scan, estimate, kRangeMax, kFullTurn);
 
   ASSERT_TRUE(corrected.has_value());
 
@@ -233,7 +338,7 @@ TEST(Corrector, AnEstimateDisplacedInHeadingIsPutBack)
   const Pose estimate{kTruth.x, kTruth.y, kTruth.t + 0.12};
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, estimate, kRangeMax);
+    corrector.correct(scan, estimate, kRangeMax, kFullTurn);
 
   ASSERT_TRUE(corrected.has_value());
 
@@ -254,7 +359,7 @@ TEST(Corrector, AnEstimateDisplacedInBothIsPutBack)
   const Pose estimate{kTruth.x + 0.11, kTruth.y - 0.09, kTruth.t + 0.12};
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, estimate, kRangeMax);
+    corrector.correct(scan, estimate, kRangeMax, kFullTurn);
 
   ASSERT_TRUE(corrected.has_value());
 
@@ -275,9 +380,9 @@ TEST(Corrector, TheSameCorrectionTwiceGivesTheSameAnswerExactly)
   const Pose estimate{kTruth.x + 0.11, kTruth.y - 0.09, kTruth.t + 0.12};
 
   const std::expected<CorrectionResult, CorrectionError> first =
-    corrector.correct(scan, estimate, kRangeMax);
+    corrector.correct(scan, estimate, kRangeMax, kFullTurn);
   const std::expected<CorrectionResult, CorrectionError> second =
-    corrector.correct(scan, estimate, kRangeMax);
+    corrector.correct(scan, estimate, kRangeMax, kFullTurn);
 
   ASSERT_TRUE(first.has_value());
   ASSERT_TRUE(second.has_value());
@@ -300,16 +405,16 @@ TEST(Corrector, ACorrectionIsNotAffectedByTheOneBeforeIt)
   const Pose estimate{kTruth.x + 0.11, kTruth.y - 0.09, kTruth.t};
 
   const std::expected<CorrectionResult, CorrectionError> alone =
-    corrector.correct(scan, estimate, kRangeMax);
+    corrector.correct(scan, estimate, kRangeMax, kFullTurn);
 
   const Corrector second_corrector(defaultParameters(), map);
 
   ASSERT_TRUE(second_corrector.correct(
       scan, Pose{kTruth.x - 0.13, kTruth.y + 0.07, kTruth.t + 0.2},
-      kRangeMax).has_value());
+      kRangeMax, kFullTurn).has_value());
 
   const std::expected<CorrectionResult, CorrectionError> after =
-    second_corrector.correct(scan, estimate, kRangeMax);
+    second_corrector.correct(scan, estimate, kRangeMax, kFullTurn);
 
   ASSERT_TRUE(alone.has_value());
   ASSERT_TRUE(after.has_value());
@@ -332,7 +437,7 @@ TEST(Corrector, AScanShorterThanTheConfiguredSizeIsRefused)
   const std::vector<double> scan(179U, 1.0);
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, kTruth, kRangeMax);
+    corrector.correct(scan, kTruth, kRangeMax, kFullTurn);
 
   ASSERT_FALSE(corrected.has_value());
   EXPECT_EQ(corrected.error(), CorrectionError::scan_too_short);
@@ -354,7 +459,7 @@ TEST(Corrector, AScanWithNoUsableRangeIsRefused)
     scan[i] = std::numeric_limits<double>::quiet_NaN();
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, kTruth, kRangeMax);
+    corrector.correct(scan, kTruth, kRangeMax, kFullTurn);
 
   ASSERT_FALSE(corrected.has_value());
   EXPECT_EQ(corrected.error(), CorrectionError::scan_entirely_invalid);
@@ -372,7 +477,7 @@ TEST(Corrector, AnEstimateOutsideTheMapIsRefused)
   const Pose outside{-5.0, -5.0, 0.0};
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, outside, kRangeMax);
+    corrector.correct(scan, outside, kRangeMax, kFullTurn);
 
   ASSERT_FALSE(corrected.has_value());
   EXPECT_EQ(corrected.error(), CorrectionError::estimate_not_in_free_space);
@@ -392,7 +497,7 @@ TEST(Corrector, AnEstimateStandingInAWallIsRefused)
   ASSERT_FALSE(map->isFree(in_the_pillar.x, in_the_pillar.y));
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, in_the_pillar, kRangeMax);
+    corrector.correct(scan, in_the_pillar, kRangeMax, kFullTurn);
 
   ASSERT_FALSE(corrected.has_value());
   EXPECT_EQ(corrected.error(), CorrectionError::estimate_not_in_free_space);
@@ -410,7 +515,7 @@ TEST(Corrector, AnEstimateSeeingNothingOnTheMapIsRefused)
   ASSERT_TRUE(map->isFree(kTruth.x, kTruth.y));
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, kTruth, kRangeMax);
+    corrector.correct(scan, kTruth, kRangeMax, kFullTurn);
 
   ASSERT_FALSE(corrected.has_value());
   EXPECT_EQ(corrected.error(),
@@ -432,7 +537,7 @@ TEST(Corrector, AMatchThatSpendsEveryRecoveryIsRefused)
   const std::vector<double> scan(90U, 2.0);
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, estimate, kRangeMax);
+    corrector.correct(scan, estimate, kRangeMax, kFullTurn);
 
   ASSERT_FALSE(corrected.has_value());
   EXPECT_EQ(corrected.error(), CorrectionError::recovery_budget_exhausted);

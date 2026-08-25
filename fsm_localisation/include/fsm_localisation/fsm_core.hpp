@@ -190,9 +190,26 @@ class Reference
   {
   }
 
-  Reference(const GridReference& grid, const double max_range) noexcept
-  : grid_(&grid), max_range_(max_range)
+  /**
+   * @brief A reference read out of an occupancy grid.
+   * @details `aperture` is what the sensor covers, in radians. A sensor that
+   * sees all the way round leaves it at a whole turn and nothing changes. A
+   * narrower one is served by casting a whole turn at that sensor's own
+   * angular spacing and keeping the middle of it, which is what such a sensor
+   * at that pose would have seen. Casting the sensor's own ray count over a
+   * whole turn instead would spread the rays out and match a scan against a
+   * reference of a different shape entirely.
+   */
+  Reference(const GridReference& grid, const double max_range,
+    const double aperture = 2.0 * M_PI) noexcept
+  : grid_(&grid), max_range_(max_range), aperture_(aperture)
   {
+  }
+
+  double aperture() const noexcept
+  {
+    assert(grid_ != nullptr);
+    return aperture_;
   }
 
   const GridReference& grid() const noexcept
@@ -228,6 +245,7 @@ class Reference
   const std::vector< std::pair<double,double> >* ring_ = nullptr;
   const GridReference* grid_ = nullptr;
   double max_range_ = 0.0;
+  double aperture_ = 2.0 * M_PI;
 };
 
 struct input_params
@@ -310,6 +328,44 @@ class Diagnostics
   }
 };
 
+/**
+ * @brief How many rays a whole turn carries at the spacing of a sensor that
+ * covers `aperture` radians with `rays` of them.
+ * @details Never fewer than the sensor's own count, so a sensor that already
+ * sees all the way round is unchanged and no caller has to special case it.
+ */
+inline std::size_t panoramicRaysOf(const std::size_t rays,
+  const double aperture)
+{
+  if (rays == 0 || !(aperture > 0.0))
+    return rays;
+
+  const double turn = static_cast<double>(rays) * 2.0 * M_PI / aperture;
+
+  const std::size_t panoramic =
+    static_cast<std::size_t>(std::llround(turn));
+
+  return panoramic < rays ? rays : panoramic;
+}
+
+/**
+ * @brief How many rays of a panoramic cast sit before the window keeps any.
+ * @details The window is centred, so what is dropped is split evenly between
+ * the two ends and an odd remainder puts the extra ray at the near end. The
+ * halfway case rounds away from zero, which every other place that takes this
+ * window also does. They have to agree or the rays they align are not the
+ * same rays.
+ */
+inline std::size_t windowPrefixOf(const std::size_t panoramic,
+  const std::size_t rays)
+{
+  if (panoramic <= rays)
+    return 0;
+
+  return static_cast<std::size_t>(
+    std::floor((panoramic - rays) / 2.0 + 0.5));
+}
+
 class X
 {
   public:
@@ -321,7 +377,8 @@ class X
     const RaySearch ray_search)
   {
     if (reference.isGrid())
-      return findGrid(pose, reference.grid(), num_rays, reference.maxRange());
+      return findGrid(pose, reference.grid(), num_rays, reference.maxRange(),
+        reference.aperture());
 
     const std::vector< std::pair<double, double> >& lines = reference.ring();
 
@@ -734,24 +791,43 @@ class X
     return intersections;
   }
 
+  /**
+   * @brief Where the map stops a ray, for every ray a sensor at `pose` would
+   * have cast.
+   * @details The grid is read over a whole turn at the sensor's own angular
+   * spacing and the middle `num_rays` of it are kept. Where the sensor sees
+   * all the way round the window is the whole cast and this reduces to what it
+   * always was. Where it does not, the alternative is to spread `num_rays`
+   * evenly over a whole turn, which compares a measurement against a reference
+   * of a different shape and converges confidently on the wrong answer.
+   */
   static std::vector< std::pair<double,double> > findGrid(
     const Pose& pose,
     const GridReference& grid,
     const unsigned int& num_rays,
-    const double max_range)
+    const double max_range,
+    const double aperture)
   {
-    const std::vector<double> scan_ranges = grid.ranges(pose, num_rays, max_range);
+    const unsigned int panoramic = static_cast<unsigned int>(
+      panoramicRaysOf(num_rays, aperture));
+
+    const std::size_t prefix = windowPrefixOf(panoramic, num_rays);
+
+    const std::vector<double> scan_ranges =
+      grid.ranges(pose, panoramic, max_range);
 
     std::vector< std::pair<double,double> > intersections(num_rays);
 
     for (unsigned int i = 0; i < num_rays; i++)
     {
-      double t_ray = i * 2*M_PI / num_rays + pose.t - M_PI;
+      const std::size_t j = prefix + i;
+
+      double t_ray = j * 2*M_PI / panoramic + pose.t - M_PI;
       t_ray = fmod(t_ray + 5*M_PI, 2*M_PI) - M_PI;
 
       intersections[i] = std::make_pair(
-        pose.x + scan_ranges[i] * cos(t_ray),
-        pose.y + scan_ranges[i] * sin(t_ray));
+        pose.x + scan_ranges[j] * cos(t_ray),
+        pose.y + scan_ranges[j] * sin(t_ray));
     }
 
     return intersections;

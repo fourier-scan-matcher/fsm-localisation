@@ -124,6 +124,8 @@ enum class CorrectionError
   first_cast_entirely_at_max_range,
 
   recovery_budget_exhausted,
+
+  aperture_not_a_sensor,
 };
 
 /**
@@ -198,11 +200,20 @@ public:
    * @param range_max the scan's own maximum range, which is what a ray meeting
    * nothing reports. The map has never seen it, so it is given per
    * correction rather than held.
+   * @param aperture what the sensor covers, in radians. A sensor that sees all
+   * the way round passes a whole turn.
+   * @remark This parameter carries no default, deliberately. A default of a
+   * whole turn would let a caller with a narrower sensor say nothing and be
+   * answered confidently and wrongly, the map being read over a whole turn and
+   * matched against a measurement covering less of one. That failure has
+   * happened once in this family already. A required parameter turns it into a
+   * compile error instead.
    */
   std::expected<CorrectionResult, CorrectionError> correct(
     std::span<const double> ranges,
     const Pose& estimate,
-    double range_max) const;
+    double range_max,
+    double aperture) const;
 
   const Parameters& parameters() const { return parameters_; }
 
