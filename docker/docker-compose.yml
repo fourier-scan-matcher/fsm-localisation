@@ -5,7 +5,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile
 
-    image: fsm-localisation:lyrical
+    image: li9i/fsm-localisation:lyrical
     container_name: fsm_localisation
     tty: true
     network_mode: "host"
