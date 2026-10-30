@@ -86,6 +86,22 @@ def displaced(displacement):
             wrap(TRUE_ROBOT_POSE[2] + displacement[2]))
 
 
+def blocked_cells(box):
+    """
+    Return the cells of the grid that a box of the room covers exactly.
+
+    The box is given the way distance_to_box takes one, with its edges on cell
+    boundaries, so the grid draws the very box a scan is computed against and
+    no cell straddles one of its faces.
+    """
+    columns = [int(round((x - GRID_ORIGIN[0]) / RESOLUTION))
+               for x in (box[0], box[2])]
+    rows = [int(round((y - GRID_ORIGIN[1]) / RESOLUTION))
+            for y in (box[1], box[3])]
+    return [(column, row)
+            for column in range(*columns) for row in range(*rows)]
+
+
 def build_map(stamp, blocked_interior=()):
     """
     Return the room as an occupancy grid.
@@ -157,6 +173,59 @@ def heading_tolerance(ranges, cells=2.0):
     return math.atan(cells * RESOLUTION / mean)
 
 
+def placement_transform(placement, child_frame_id=SENSOR_FRAME, roll=0.0):
+    """
+    Return where a laser sits on the robot, as one transform of the tree.
+
+    A roll turns the laser about its own forward axis before the placement's
+    heading turns it about the vertical. Half a turn of roll is a laser
+    mounted upside down.
+
+    The cosine of half the roll is taken as the sine of a quarter turn less
+    half the roll. The two are equal, but at half a turn of roll the cosine
+    comes to 6e-17 and the sine to exactly nought. Left at 6e-17, the
+    rotation's z and w would still carry the heading in their ratio, so a node
+    that took the heading from those two alone could not be told apart from
+    one that reads the whole rotation.
+    """
+    half_yaw = placement[2] / 2.0
+    half_roll = roll / 2.0
+    cos_half_roll = math.sin(math.pi / 2.0 - half_roll)
+
+    message = TransformStamped()
+    message.header.stamp.sec = 0
+    message.header.stamp.nanosec = 0
+    message.header.frame_id = ROBOT_FRAME
+    message.child_frame_id = child_frame_id
+    message.transform.translation.x = placement[0]
+    message.transform.translation.y = placement[1]
+    message.transform.rotation.x = math.cos(half_yaw) * math.sin(half_roll)
+    message.transform.rotation.y = math.sin(half_yaw) * math.sin(half_roll)
+    message.transform.rotation.z = math.sin(half_yaw) * cos_half_roll
+    message.transform.rotation.w = math.cos(half_yaw) * cos_half_roll
+    return message
+
+
+def upside_down(ranges, first_angle=-math.pi):
+    """
+    Return a whole turn scan as the same laser reports it mounted upside down.
+
+    Rolled half a turn about its forward axis, the laser's ray at angle a
+    points where an upright laser's ray at -a points, so each ray is looked up
+    by its angle. For a scan that begins at minus pi, ray i lies at minus pi
+    plus i increments and its mirror is ray size - i, ray 0 being its own. The
+    list is not simply reversed: that pairs ray i with ray size - 1 - i, the
+    mirror turned by one ray, because a scan that begins at minus pi ends one
+    ray short of pi and so is not symmetric about nought. For a scan that is
+    symmetric about nought, reversing the list is the mirror.
+    """
+    size = len(ranges)
+    increment = 2.0 * math.pi / size
+    return [ranges[round((-2.0 * first_angle - ray * increment) / increment)
+                   % size]
+            for ray in range(size)]
+
+
 class AmeliorationHarness(Node):
     """Drives a node in the correcting mode and collects what it publishes."""
 
@@ -220,40 +289,42 @@ class AmeliorationHarness(Node):
         """Send one map to the node."""
         self.map_publisher.publish(build_map(stamp, blocked_interior))
 
-    def publish_scan(self, stamp, sensor_pose=None, size=SCAN_SIZE, ranges=None):
+    def publish_scan(self, stamp, sensor_pose=None, size=SCAN_SIZE, ranges=None,
+                     frame_id=SENSOR_FRAME, first_angle=-math.pi):
         """Send one scan to the node, seen from where the laser really is."""
         if sensor_pose is None:
             sensor_pose = true_sensor_pose()
 
         scan = LaserScan()
         scan.header.stamp.sec, scan.header.stamp.nanosec = stamp
-        scan.header.frame_id = SENSOR_FRAME
-        scan.angle_min = -math.pi
-        scan.angle_max = math.pi - 2.0 * math.pi / size
+        scan.header.frame_id = frame_id
+        scan.angle_min = first_angle
+        scan.angle_max = first_angle + 2.0 * math.pi - 2.0 * math.pi / size
         scan.angle_increment = 2.0 * math.pi / size
         scan.time_increment = 0.0
         scan.scan_time = 0.1
         scan.range_min = 0.0
         scan.range_max = 100.0
         scan.ranges = ranges if ranges is not None else room_scan(
-            *sensor_pose, width=ROOM_WIDTH, height=ROOM_HEIGHT, size=size)
+            *sensor_pose, width=ROOM_WIDTH, height=ROOM_HEIGHT, size=size,
+            first_angle=first_angle)
         scan.intensities = []
         self.scan_publisher.publish(scan)
         return scan
 
-    def publish_sensor_placement(self, placement=SENSOR_ON_ROBOT):
-        """Put where the laser sits on the robot into the transform tree."""
-        message = TransformStamped()
-        message.header.stamp.sec = 0
-        message.header.stamp.nanosec = 0
-        message.header.frame_id = ROBOT_FRAME
-        message.child_frame_id = SENSOR_FRAME
-        message.transform.translation.x = placement[0]
-        message.transform.translation.y = placement[1]
-        message.transform.rotation.z = math.sin(placement[2] / 2.0)
-        message.transform.rotation.w = math.cos(placement[2] / 2.0)
+    def publish_sensor_placement(self, placement=SENSOR_ON_ROBOT,
+                                 mountings=((SENSOR_FRAME, 0.0),)):
+        """
+        Put where the laser sits on the robot into the transform tree.
 
-        self.static_transform_publisher.publish(TFMessage(transforms=[message]))
+        Each mounting is a frame and a roll, and each frame is put at the same
+        placement turned by its own roll. They go out in one message because
+        the topic keeps one message for whoever subscribes next, and a second
+        message would hide the first from them.
+        """
+        self.static_transform_publisher.publish(TFMessage(transforms=[
+            placement_transform(placement, frame_id, roll)
+            for frame_id, roll in mountings]))
 
     def spin(self, seconds=SETTLE):
         """Process callbacks for a while."""

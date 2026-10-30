@@ -47,17 +47,50 @@ THIRD_STAMP = (1700000000, 200000000)
 FOURTH_STAMP = (1700000000, 300000000)
 
 
-def room_scan(x, y, theta, width=8.0, height=5.0, size=SCAN_SIZE):
-    """Return the ranges seen from a pose inside an axis aligned rectangle."""
+def distance_to_box(x, y, angle, box):
+    """
+    Return how far a ray from outside an axis aligned box travels to reach it.
+
+    The box is given as its lowest x, lowest y, highest x and highest y. Along
+    each axis the ray is within the box's extent between two distances. It is
+    inside the box where those two stretches overlap, and it reaches the box
+    where the overlap begins. A ray that misses the box travels forever.
+    """
+    near = 0.0
+    far = float('inf')
+    for origin, direction, low, high in ((x, math.cos(angle), box[0], box[2]),
+                                         (y, math.sin(angle), box[1], box[3])):
+        if direction == 0.0:
+            if not low <= origin <= high:
+                return float('inf')
+            continue
+        enter = (low - origin) / direction
+        leave = (high - origin) / direction
+        near = max(near, min(enter, leave))
+        far = min(far, max(enter, leave))
+    return near if near <= far else float('inf')
+
+
+def room_scan(x, y, theta, width=8.0, height=5.0, size=SCAN_SIZE,
+              pillar=None, first_angle=-math.pi):
+    """
+    Return the ranges seen from a pose inside an axis aligned rectangle.
+
+    A pillar, a box given the way distance_to_box takes one, stands in the
+    room and hides whatever is behind it. The scan is a whole turn whose first
+    ray lies first_angle from theta.
+    """
     ranges = []
     for i in range(size):
-        angle = i * 2.0 * math.pi / size + theta - math.pi
+        angle = i * 2.0 * math.pi / size + theta + first_angle
         best = float('inf')
         for distance, normal in ((x, (-1.0, 0.0)), (width - x, (1.0, 0.0)),
                                  (y, (0.0, -1.0)), (height - y, (0.0, 1.0))):
             projection = math.cos(angle) * normal[0] + math.sin(angle) * normal[1]
             if projection > 1e-9:
                 best = min(best, distance / projection)
+        if pillar is not None:
+            best = min(best, distance_to_box(x, y, angle, pillar))
         ranges.append(best if best != float('inf') else 0.0)
     return ranges
 

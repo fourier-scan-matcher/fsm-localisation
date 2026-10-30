@@ -4,6 +4,21 @@ Changelog for package fsm_localisation
 
 Forthcoming
 -----------
+* Reads a sensor mounted upside down from the transform tree, with nothing to
+  set. The correction read the rotation of the sensor's placement on the robot
+  as a heading and nothing more, so a lidar mounted half a turn about its
+  forward axis was taken for an upright one and its scan was matched as the
+  mirror image of the room. On a recording from a robot whose lidar is mounted
+  that way, none of twenty estimates pushed 0.1 m and 5 degrees off the logged
+  pose was put back within 0.1 m and 2 degrees of it. The whole rotation is now
+  read. Where the sensor's z axis points down the ranges are taken in reverse
+  order and laid out from the sensor's heading less the sum of the scan's first
+  and last angles, which is exact for any scan the node accepts. Reversing the
+  ranges alone would turn the answer by one ray on a scan beginning at minus
+  pi. A setup that flipped the scan in its driver while its transform tree
+  carries the half turn of roll is now read mirrored, and should drop one of
+  the two. The optional map scan now runs in the order the sensor reports its
+  rays, where for such a sensor it was drawn as the mirror image of the scan.
 * Corrects a defect that answered a narrower sensor confidently and wrongly.
   ``Corrector::correct`` was never told what the sensor covered, so it read the
   map over a whole turn and matched it against a measurement covering less of

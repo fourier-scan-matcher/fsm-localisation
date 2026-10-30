@@ -219,6 +219,10 @@ if(BUILD_TESTING)
     ENV ROS_DOMAIN_ID=78
     APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
 
+  add_launch_test(test/test_upside_down_sensor.py TIMEOUT 300
+    ENV ROS_DOMAIN_ID=79
+    APPEND_ENV PYTHONPATH=${CMAKE_CURRENT_SOURCE_DIR}/test)
+
   foreach(test_target test_fsm_localisation_cbgl_defects test_fsm_localisation_core
                       test_fsm_localisation_core_golden
                       test_fsm_localisation_dft test_fsm_localisation_geometry

@@ -37,6 +37,7 @@
 #include <rclcpp/wait_for_message.hpp>
 #include <tf2/LinearMath/Matrix3x3.hpp>
 #include <tf2/LinearMath/Quaternion.hpp>
+#include <tf2/LinearMath/Vector3.hpp>
 
 namespace fsm_localisation
 {
@@ -73,6 +74,24 @@ Pose invert(const Pose& a)
     FSM::Utils::wrapAngle(-a.t)};
 }
 
+/**
+ * @brief Whether a rotation turns the z axis of its frame to point down.
+ * @details A sensor mounted upside down, rolled half a turn about its forward
+ * axis, has its z axis down, and seen from above its rays sweep clockwise
+ * where an upright sensor's sweep anticlockwise. Its x axis points the same
+ * way as an upright one's would, so the heading `yawOf` reads from it is
+ * right, and the heading alone cannot tell the two mountings apart.
+ * @remark `orientation` is one `yawOf` has read a heading from, so it is
+ * finite and has a length to be normalised by.
+ */
+bool isUpsideDown(const geometry_msgs::msg::Quaternion& orientation)
+{
+  const tf2::Matrix3x3 rotation(tf2::Quaternion(
+    orientation.x, orientation.y, orientation.z, orientation.w));
+
+  return rotation.getColumn(2).z() < 0.0;
+}
+
 rclcpp::QoS scanQos(const std::string& reliability, int depth)
 {
   rclcpp::QoS qos(static_cast<std::size_t>(depth));
@@ -83,6 +102,61 @@ rclcpp::QoS scanQos(const std::string& reliability, int depth)
     qos.reliable();
 
   return qos;
+}
+
+/**
+ * @brief A scan's ranges in the order an upright sensor reports them, and
+ * where on the robot that upright sensor stands.
+ */
+struct UprightScan
+{
+  Pose sensor;
+  std::vector<double> ranges;
+};
+
+/**
+ * @brief `scan` as an upright sensor would have reported it, and where on the
+ * robot that sensor stands.
+ * @details An upright sensor's ray `k` lies at heading `h + a_k` on the robot,
+ * where `h` is the heading of the sensor's x axis and
+ * `a_k = angle_min + k * angle_increment`, and the corrector reads every scan
+ * as an upright sensor's. A sensor whose z axis points down sweeps the other
+ * way, so its ray `j` lies at `h - a_j`, and reading it as `h + a_j` reads the
+ * mirror image of the room.
+ * Reversing the ranges puts them back in anticlockwise order. Ray `k` of
+ * the reversed scan is ray `n - 1 - k` of the scan, which lies at
+ * `h - angle_min - (n - 1 - k) * angle_increment`, and that is
+ * `(h - s) + a_k` with `s = 2 * angle_min + (n - 1) * angle_increment`, the
+ * sum of the scan's first and last angles. The reversed scan is therefore
+ * exactly what an upright sensor with the same angles reports from heading
+ * `h - s`, and it is handed over as that sensor's. No ray is dropped or
+ * interpolated, and the corrector reads its angles exactly as it reads an
+ * upright scan's.
+ * @remark `s` is nought for a scan symmetric about the sensor's heading, and
+ * there the reversal alone is the mirror. It is minus one ray for a panoramic
+ * scan beginning at minus pi, and a reversal without the turn would rotate the
+ * answer by that ray.
+ */
+UprightScan uprightScanOf(const sensor_msgs::msg::LaserScan& scan,
+  const Pose& sensor_on_robot, const bool upside_down)
+{
+  if (!upside_down)
+  {
+    return UprightScan{
+      sensor_on_robot,
+      std::vector<double>(scan.ranges.begin(), scan.ranges.end())};
+  }
+
+  const double rays = static_cast<double>(scan.ranges.size());
+  const double skew =
+    2.0 * scan.angle_min + (rays - 1.0) * scan.angle_increment;
+
+  return UprightScan{
+    Pose{
+      sensor_on_robot.x,
+      sensor_on_robot.y,
+      FSM::Utils::wrapAngle(sensor_on_robot.t - skew)},
+    std::vector<double>(scan.ranges.rbegin(), scan.ranges.rend())};
 }
 
 std::optional<double> yawOf(const geometry_msgs::msg::Quaternion& orientation)
@@ -408,12 +482,15 @@ std::string Interface::correctFrom(
     placement.transform.translation.y,
     *placement_yaw};
 
-  const Pose estimated_sensor = compose(estimated_base, sensor_on_robot);
+  const bool upside_down = isUpsideDown(placement.transform.rotation);
 
-  const std::vector<double> ranges(scan->ranges.begin(), scan->ranges.end());
+  const UprightScan upright =
+    uprightScanOf(*scan, sensor_on_robot, upside_down);
+
+  const Pose estimated_sensor = compose(estimated_base, upright.sensor);
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector->correct(ranges, estimated_sensor, scan->range_max,
+    corrector->correct(upright.ranges, estimated_sensor, scan->range_max,
       apertureOf(*scan));
 
   if (!corrected.has_value())
@@ -435,7 +512,8 @@ std::string Interface::correctFrom(
       "A correction takes %.0f ms but estimates arrive every %.0f ms, so "
       "estimates are going uncorrected. Matching is at %zu rays; setting "
       "size_scan below that matches fewer and takes less time over it.",
-      1000.0 * corrected->execution_time, 1000.0 * interval, ranges.size());
+      1000.0 * corrected->execution_time, 1000.0 * interval,
+      upright.ranges.size());
   }
 
   if (corrected->num_recoveries > 0)
@@ -446,13 +524,13 @@ std::string Interface::correctFrom(
   }
 
   const Pose corrected_base =
-    compose(corrected->corrected, invert(sensor_on_robot));
+    compose(corrected->corrected, invert(upright.sensor));
 
   publishCorrectedPose(estimate, corrected_base);
   publishCorrectionTransforms(estimated_base, corrected_base, stamp);
 
   if (map_scan_publisher_)
-    publishMapScan(*scan, corrected->corrected, stamp);
+    publishMapScan(*scan, corrected->corrected, upside_down, stamp);
 
   return {};
 }
@@ -596,8 +674,18 @@ void Interface::publishCorrectionTransforms(
     compose(invert(estimated_base), corrected_base));
 }
 
+/**
+ * @details For a sensor mounted upside down `corrected_sensor` is the upright
+ * sensor its scan was handed over as, whose ray `n - 1 - k` points where the
+ * mounted sensor's ray `k` does. The cast is taken from that upright sensor
+ * and published in reverse order. Where the scan is a whole turn beginning at
+ * minus pi, cast ray `k` lies along that upright sensor's ray `k`, so
+ * published ray `k` lies along the mounted sensor's ray `k` and not along its
+ * mirror image.
+ */
 void Interface::publishMapScan(const sensor_msgs::msg::LaserScan& real_scan,
-  const Pose& corrected_sensor, const rclcpp::Time& stamp)
+  const Pose& corrected_sensor, const bool upside_down,
+  const rclcpp::Time& stamp)
 {
   std::shared_ptr<const OccupancyGridMap> map;
 
@@ -621,7 +709,10 @@ void Interface::publishMapScan(const sensor_msgs::msg::LaserScan& real_scan,
   message.range_min = real_scan.range_min;
   message.range_max = real_scan.range_max;
 
-  message.ranges.assign(ranges.begin(), ranges.end());
+  if (upside_down)
+    message.ranges.assign(ranges.rbegin(), ranges.rend());
+  else
+    message.ranges.assign(ranges.begin(), ranges.end());
 
   map_scan_publisher_->publish(message);
 }

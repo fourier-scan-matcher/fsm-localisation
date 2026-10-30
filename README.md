@@ -246,7 +246,7 @@ An estimate arrives, and the node reports where the sensor actually was.
 
 An estimate is what triggers a correction. A scan on its own causes nothing to happen: the newest scan is held until an estimate asks for it.
 
-**A transform is required.** `robot_frame_id`, default `base_footprint`, is looked up against the scan's own frame, because an incoming estimate places the robot and the matcher needs to know where the sensor sits on it. Without that transform in the tree every correction is refused for want of the sensor's placement.
+**A transform is required.** `robot_frame_id`, default `base_footprint`, is looked up against the scan's own frame, because an incoming estimate places the robot and the matcher needs to know where the sensor sits on it. The whole rotation is read, not its heading alone, so a sensor mounted upside down needs nothing set. Without that transform in the tree every correction is refused for want of the sensor's placement.
 
 #### Subscribed topics
 

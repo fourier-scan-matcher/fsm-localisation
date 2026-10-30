@@ -114,8 +114,18 @@ private:
   void publishCorrectionTransforms(
     const Pose& estimated_base, const Pose& corrected_base,
     const rclcpp::Time& stamp);
+  /**
+   * @brief Publish a cast into the map from the corrected sensor, in the scan's
+   * own frame, for laying over the scan.
+   * @param upside_down whether the sensor is mounted upside down, in which case
+   * `corrected_sensor` is the upright sensor its scan was handed over as.
+   * @remark The cast spreads the scan's ray count over a whole turn from half
+   * a turn behind the sensor's heading, so it lies ray for ray over the scan
+   * only where the scan is a whole turn beginning at minus pi.
+   */
   void publishMapScan(const sensor_msgs::msg::LaserScan& real_scan,
-    const Pose& corrected_sensor, const rclcpp::Time& stamp);
+    const Pose& corrected_sensor, const bool upside_down,
+    const rclcpp::Time& stamp);
   void publishOdometry(const MatchResult& result, const rclcpp::Time& stamp,
     double interval);
   void publishPath(const MatchResult& result, const rclcpp::Time& stamp);
