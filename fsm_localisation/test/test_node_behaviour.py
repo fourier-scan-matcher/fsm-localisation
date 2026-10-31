@@ -36,6 +36,7 @@ import time
 import unittest
 
 from fsm_localisation_test_support import (
+    BEFORE_ZERO_STAMP,
     build_scan,
     FIRST_STAMP,
     FOURTH_STAMP,
@@ -121,6 +122,30 @@ class TestNodeBehaviour(unittest.TestCase):
 
         self.assertTrue(self.harness.call('start').success,
                         'the node did not survive being stopped')
+
+    def test_a_scan_stamped_before_zero_is_ignored_and_the_next_matched(self):
+        """
+        Ignore a scan stamped before zero and match the scan after it.
+
+        A ROS time holds no time before zero, and building one throws. A throw
+        that escaped the callback would stop the node, so the case sends a
+        scan after that one as well and requires the odometry it produces.
+        """
+        self.harness.call('start')
+        self.harness.clear()
+        self.drive([(3.0, 2.5, 0.0), (3.01, 2.5, 0.0), (3.02, 2.5, 0.0)],
+                   [FIRST_STAMP, BEFORE_ZERO_STAMP, SECOND_STAMP])
+
+        stamps = [(message.header.stamp.sec, message.header.stamp.nanosec)
+                  for message in self.harness.odometry]
+
+        self.assertTrue(set(stamps) <= {FIRST_STAMP, SECOND_STAMP},
+                        'odometry was published stamped %s, where only the two '
+                        'scans stamped at or after zero may produce any'
+                        % sorted(set(stamps) - {FIRST_STAMP, SECOND_STAMP}))
+        self.assertIn(SECOND_STAMP, stamps,
+                      'no odometry came from the scan after the one stamped '
+                      'before zero')
 
     def test_clear_estimated_trajectory_empties_the_path(self):
         self.harness.call('start')

@@ -899,6 +899,13 @@ void Interface::scanCallback(sensor_msgs::msg::LaserScan::ConstSharedPtr scan)
     return;
   }
 
+  if (scan->header.stamp.sec < 0)
+  {
+    RCLCPP_WARN(get_logger(),
+      "Scan stamped before zero, which a ROS time cannot hold; ignoring it");
+    return;
+  }
+
   const rclcpp::Time stamp(scan->header.stamp);
 
   const std::vector<double> ranges(scan->ranges.begin(), scan->ranges.end());
