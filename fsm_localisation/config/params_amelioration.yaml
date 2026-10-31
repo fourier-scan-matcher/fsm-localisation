@@ -33,8 +33,9 @@
     # --------------------------------------------------------------------------
     # IO topics
     # --------------------------------------------------------------------------
-    # 2d panoramic scans are read here. The newest one is held until an estimate
-    # asks for it; a scan on its own causes nothing to happen.
+    # 2d scans of a whole turn or less, centred on the sensor's heading, are
+    # read here. The newest one is held until an estimate asks for it. A scan
+    # on its own causes nothing to happen.
     scan_topic: "/base_scan"
 
     # The map to match against. Subscribed with transient local durability and a
@@ -50,9 +51,10 @@
     # estimate it corrected untouched.
     pose_estimate_topic: "fsm_localisation_amelioration/pose_estimate"
 
-    # The scan the corrected pose would see, cast from the map, for laying over
-    # the scan the sensor did see. Costs one extra cast per correction and
-    # nothing in the matching depends on it. Leave empty to publish nothing.
+    # The scan the corrected pose would see, cast from the map along the scan's
+    # own rays. It lies over the scan the sensor did see ray for ray, whatever
+    # the sensor covers. Costs one cast per ray of the scan, per correction,
+    # and nothing in the matching depends on it. Leave empty to publish nothing.
     map_scan_topic: "fsm_localisation_amelioration/map_scan"
 
     # --------------------------------------------------------------------------
@@ -141,8 +143,11 @@
     max_recoveries: 10
 
     # 0 draws the recovery search from hardware entropy, as this algorithm has
-    # always done. Any other value pins it so that a correction can be repeated
-    # exactly.
+    # always done. Any other value seeds the generator of each executor thread
+    # once, at the first draw on that thread. Any executor thread may run a
+    # correction, so which draw a recovery gets depends on the thread schedule.
+    # Two corrections of the same input can still differ where a recovery was
+    # needed, down to whether the correction settles or is refused.
     rng_seed: 0
 
     # How each ray of a scan is matched to the wall it meets.
@@ -178,8 +183,8 @@
 
     # When every candidate angle fails its trial translation, start a recovery
     # rather than carry on with the angle of a candidate that failed. Reaches
-    # the recovery path more often, so rng_seed governs whether two runs over
-    # the same input agree exactly.
+    # the recovery path more often, and a correction that needs a recovery can
+    # differ from one run to the next, as rng_seed above says.
     recover_on_failed_sift: true
 
     # --------------------------------------------------------------------------

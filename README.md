@@ -16,13 +16,13 @@
     <a href="#run">run</a>
 </h3>
 
-`fsm_localisation` is a ROS 2 package written in C++ that matches panoramic 2D lidar scans, that is: scans from a sensor whose field of view is 360 degrees. One node, two modes, one matcher underneath both.
+`fsm_localisation` is a ROS 2 package written in C++ that matches 2D lidar scans. One node, two modes, one matcher underneath both. Odometry mode expects a sensor whose field of view is 360 degrees. Amelioration mode also reads a sensor that covers less.
 
 **Odometry mode** matches each scan against the one before it and reports how far the sensor moved. No map and no pose estimate are needed.
 
 **Amelioration mode** matches a scan against an occupancy grid and reports where the sensor actually was, correcting a pose estimate somebody else produced.
 
-**A sensor that does not see all the way round is read in amelioration mode.** The map is read over a whole turn at the sensor's own angular spacing and only the part of it the sensor could have seen is compared. The scan has to say what it covers, through `angle_increment` and a ray count, and has to be centred on the sensor's heading; a scan that spans more than a turn, or that begins somewhere else, is refused at the point of use rather than answered wrongly. Odometry mode is unaffected, matching each scan against the one before it at whatever aperture both carry.
+**A sensor that does not see all the way round is read in amelioration mode.** The map is read over a whole turn at the sensor's own angular spacing and only the part of it the sensor could have seen is compared. The scan has to say what it covers, through `angle_increment` and a ray count, and has to be centred on the sensor's heading; a scan that spans more than a turn, or that begins somewhere else, is refused at the point of use rather than answered wrongly. Odometry mode does not read what a scan covers. It lays every scan out over a whole turn, so it expects a sensor that sees all the way round. It does not refuse a narrower one.
 
 <p align="center">
   <img src="https://i.imgur.com/hUsBImy.png">
@@ -204,7 +204,7 @@ Every service is node relative, so it follows the node's name. The names below a
 
 | Topic | Type | Utility |
 | --- | --- | --- |
-| `scan_topic` | `sensor_msgs/msg/LaserScan` | 2d panoramic scans are published here |
+| `scan_topic` | `sensor_msgs/msg/LaserScan` | 2d scans are published here, each taken as a whole turn |
 | `initial_pose_topic` | `geometry_msgs/msg/PoseWithCovarianceStamped` | optional, for setting the very first pose estimate to something other than the origin |
 
 `initial_pose_topic` is not a standing subscription. One message is read from it when `set_initial_pose` is called, and nothing listens to it otherwise.
@@ -217,7 +217,7 @@ Every service is node relative, so it follows the node's name. The names below a
 | `path_estimate_topic` | `nav_msgs/msg/Path` | the whole estimated trajectory, relative to `global_frame_id` |
 | `lo_topic` | `nav_msgs/msg/Odometry` | the displacement between the last two scans |
 
-Every message is stamped with the timestamp of the scan that produced it, not with the clock at the moment it was produced. Replaying a recording therefore gives the same output every time.
+Every message is stamped with the timestamp of the scan that produced it, not with the clock at the moment it was produced. A replay of a recording therefore gives the same stamps every time. A match that needs the recovery search can still give a different pose on each replay, see `rng_seed` under Parameters.
 
 #### Services offered
 
@@ -252,7 +252,7 @@ An estimate is what triggers a correction. A scan on its own causes nothing to h
 
 | Topic | Type | Utility |
 | --- | --- | --- |
-| `scan_topic` | `sensor_msgs/msg/LaserScan` | 2d panoramic scans are published here |
+| `scan_topic` | `sensor_msgs/msg/LaserScan` | 2d scans of a whole turn or less, centred on the sensor's heading, are published here |
 | `map_topic` | `nav_msgs/msg/OccupancyGrid` | the map to match against |
 | `pose_estimate_input_topic` | `geometry_msgs/msg/PoseWithCovarianceStamped` | the estimates to correct. Each one arriving triggers a correction |
 
@@ -263,7 +263,7 @@ The map subscription uses transient local durability at a depth of one, so a map
 | Topic | Type | Utility |
 | --- | --- | --- |
 | `pose_estimate_topic` | `geometry_msgs/msg/PoseWithCovarianceStamped` | the corrected estimate, carrying the covariance of the estimate it corrected untouched |
-| `map_scan_topic` | `sensor_msgs/msg/LaserScan` | optional. The scan the corrected pose would see, cast from the map, for laying over the scan the sensor did see. Leave the setting empty to publish nothing |
+| `map_scan_topic` | `sensor_msgs/msg/LaserScan` | optional. The scan the corrected pose would see, cast from the map along the scan's own rays. It lies over the scan the sensor did see ray for ray, whatever the sensor covers. Leave the setting empty to publish nothing |
 
 #### Services offered
 
@@ -285,10 +285,20 @@ Two frames that exist only to carry this node's answer, so that no frame in an e
 
 #### Why a correction is refused
 
-Five reasons, each returned as a sentence:
+Every refusal is returned as a sentence. Before it matches, the node refuses a correction for these reasons:
+
+- the node holds no map, or no scan, yet
+- the scan spans more than a whole turn, or is not centred on the sensor's heading
+- the estimate names a frame other than the map's
+- the estimate's position is not finite, or its orientation carries no heading
+- the estimate is stamped before zero
+- the sensor's placement on the robot cannot be read from the transform tree, or carries no heading
+
+The matcher then refuses for six reasons:
 
 - the scan is too short to match
 - the scan carries no usable range
+- the scan's aperture is not something a sensor can cover
 - the estimate is not on free space, which covers both a position outside the map and one on a blocked cell
 - every ray cast from the estimate came back at maximum range, so the estimate sees nothing of the map
 - the match spent its whole recovery budget without settling
@@ -308,7 +318,7 @@ A parameter outside its permitted range is refused at start-up with a sentence n
 | Parameter | Description | Default |
 | --- | --- | --- |
 | `mode` | `odometry` or `amelioration`. No default; the node refuses to start without it | none |
-| `scan_topic` | where 2d panoramic scans are published | `/base_scan` |
+| `scan_topic` | where 2d scans are published | `/base_scan` |
 | `pose_estimate_topic` | where this node's answer is published. The message type differs by mode | `<node name>/pose_estimate` |
 | `global_frame_id` | the global frame, for example `map` | `map` |
 | `base_frame_id` | the lidar sensor's own frame | `base_laser_link` |
@@ -320,7 +330,7 @@ A parameter outside its permitted range is refused at start-up with a sentence n
 | `t_bound` | angular radius for the same | pi/4 |
 | `max_counter` | lower values decrease execution time | 200 |
 | `max_recoveries` | lower values decrease execution time | 10 |
-| `rng_seed` | `0` draws the recovery search from hardware entropy, as always. Any other value pins it so a run can be repeated | 0 |
+| `rng_seed` | `0` draws the recovery search from hardware entropy, as always. Any other value seeds its generators, see below | 0 |
 | `ray_search` | `angular` or `windowed`. How each ray is matched to the wall it meets | `angular` |
 | `enforce_early_gearup` | jump to maximum oversampling once the rotation criterion passes 0.99999 | false |
 | `enforce_translation_bound` | abandon a candidate whose position wanders more than `xy_bound` plus 0.01 from where the translation stage started | false |
@@ -330,7 +340,7 @@ A parameter outside its permitted range is refused at start-up with a sentence n
 
 Frame ids carry no leading slash. tf2 rejects them.
 
-The last three matcher switches are carried across from the scan-to-map matcher this package borrows from. All three are unconditional in that matcher and absent from the odometry one, so the shipped amelioration configuration turns all three on and the shipped odometry configuration leaves all three off. They default to off, since a node given neither configuration file has no mode to infer them from. With all three on, a correction reaches the recovery path more often than before, so `rng_seed` decides whether two runs over the same input agree exactly.
+The last three matcher switches are carried across from the scan-to-map matcher this package borrows from. All three are unconditional in that matcher and absent from the odometry one, so the shipped amelioration configuration turns all three on and the shipped odometry configuration leaves all three off. They default to off, since a node given neither configuration file has no mode to infer them from. With all three on, a correction reaches the recovery path more often than before. A correction that needs a recovery can differ from one run to the next, see `rng_seed` below.
 
 `size_scan` decides how many rays a scan is matched at. `0`, the default, matches every ray the scan carries: the sensor's own resolution, with nothing discarded. In odometry mode the first scan to arrive settles the size for the session, since two scans can only be matched against each other at one size, and a later scan of a different length is resampled to it rather than dropped. In amelioration mode it is settled afresh for every correction, since one correction is never compared against another.
 
@@ -339,6 +349,8 @@ Any other value reduces every scan to that many rays before matching, and refuse
 `ray_search` picks between two ways of finding the wall each ray meets. `angular` offers each wall only to the rays that can reach it. It returns the nearest wall in front of every ray whatever shape the room is, and its execution time rises in step with `size_scan`. `windowed` narrows the search for each ray to the neighbourhood of the wall the previous ray met. It is what this algorithm shipped with, and it is kept so that a run can be compared against results published before `angular` existed. Its execution time rises with the square of `size_scan`, and where a room turns back on itself it can return a wall standing behind the nearest one.
 
 Measured over 13908 matches drawn from a recorded dataset at `size_scan: 360`, `angular` completes a match in 17.9 ms against `windowed`'s 25.4 ms, median. The two disagree on 0.67 per cent of matches, by a median of 3.5 mm. At `size_scan: 1440` the ray casting alone is 3.2 times faster, and at 5760, 12.4 times.
+
+`rng_seed` decides how the recovery search draws the poses it restarts a match from. `0`, the default, draws them from hardware entropy, as this algorithm has always done. Any other value seeds the generator of each executor thread with that value, once, at the first draw on that thread. The node runs several executor threads, and any of them may run a match or a correction. Thus which draw a recovery gets depends on the thread schedule. Two runs over the same input can still differ at a step that needed a recovery. A correction can settle in one run and be refused in another. On a recording from a real robot, three odometry runs at `rng_seed` 1 went over the same 2000 scans. The second and the third each differed from the first from step 79. A match that needs no recovery draws nothing, so the seed does not change it.
 
 ### Odometry mode only
 

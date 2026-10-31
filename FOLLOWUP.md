@@ -329,12 +329,9 @@ what would catch this declaratively and would also make the range visible to
 `ros2 param describe`. Found, recorded, not fixed: it is a small amount of work
 per parameter and the node declares thirty three.
 
-### Sensors that do not see all the way round are unsupported
+### Odometry mode assumes a sensor that sees all the way round
 
-The matcher requires a panoramic scan, and the core carries a scan completion
-routine that would fill in a partial one. Nothing calls it. A sensor with a
-narrower field of view is not supported and is not refused with a sentence
-explaining why.
+Amelioration mode reads what a scan covers, and refuses a scan that spans more than a whole turn or is not centred on the sensor's heading. Odometry mode does not read it. It lays every scan out over a whole turn, so the rays of a narrower sensor are matched at angles they were not taken at. Nothing refuses such a scan with a sentence that explains why. The core carries a scan completion routine that would fill in a partial scan. Nothing calls it.
 
 ## Build, packaging and containers
 
@@ -464,13 +461,11 @@ not from its mean columns.
 The standard library does not specify how a distribution turns random bits into a
 number, so two implementations may differ even from the same seed. Comparing the
 recovery path across versions would first need that conversion written out
-explicitly rather than taken from the library. `rng_seed` pins it within one
-build, and there is a unit test for that.
+explicitly rather than taken from the library.
 
-The seed also reached only one branch of the predecessor's proof tree. The other
-still seeds from hardware entropy with no way to pin it. That changes nothing
-about the reference recordings, which were captured from a build where recovery
-never fired.
+A non-zero `rng_seed` does not make a run repeat, even within one build. Each executor thread seeds its own generator, and any of them may run a match. Thus which draw a recovery gets depends on the thread schedule. A unit test shows only that one thread seeded alike draws alike.
+
+The seed also reached only one branch of the predecessor's proof tree. The other still seeds from hardware entropy, with no setting to change that. That changes nothing about the reference recordings, which were captured from a build where recovery never fired.
 
 ### Casting is not integer arithmetic, and the specification assumed it was
 

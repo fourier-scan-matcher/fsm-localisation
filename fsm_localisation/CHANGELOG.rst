@@ -4,6 +4,29 @@ Changelog for package fsm_localisation
 
 Forthcoming
 -----------
+* Refuses an estimate stamped before zero with a sentence and keeps running.
+  The conversion of such a stamp to a time threw an exception that nothing
+  caught, and the node aborted at the first such estimate.
+* Ignores a scan stamped before zero in odometry mode, with a warning, and
+  keeps running. The conversion of such a stamp to a time threw an exception
+  that nothing caught, and the node aborted at the first such scan.
+* Makes the node's start and stop flag safe to read and write from several
+  executor threads at once. The flag was a plain ``bool``, written by
+  ``start`` and ``stop`` and read on other executor threads. A ThreadSanitizer
+  run of the start, stop and correction tests reported that race seven times
+  before and none after.
+* Lays the optional map scan over the scan the sensor reported, ray for ray,
+  whatever the sensor covers. It spread the scan's ray count over a whole turn
+  from half a turn behind the heading, but carried the scan's own angles. Thus
+  for a sensor that covers less than a turn, it did not lie over the scan. Each
+  ray is now cast along the matching ray of the scan. In the test room it now
+  disagrees with a 270 degree scan by 0.026 m a ray, where it disagreed by
+  0.56 m.
+* No longer says that a non-zero ``rng_seed`` makes a run repeat. The README
+  and both parameter files said so. Each executor thread seeds its own
+  generator, and any of them may run a match. Thus which draw a recovery gets
+  depends on the thread schedule. On a recording from a real robot, three
+  odometry runs at ``rng_seed`` 1 over 2000 scans differed from step 79.
 * Reads a sensor mounted upside down from the transform tree, with nothing to
   set. The correction read the rotation of the sensor's placement on the robot
   as a heading and nothing more, so a lidar mounted half a turn about its
@@ -115,8 +138,9 @@ Inherited from fsm_lidar_odometry, unreleased
   service names are unchanged.
 * Output is stamped from the incoming scan rather than from the clock at the
   moment of processing. The reported twist follows from the interval between
-  scan stamps, so it no longer varies with machine load, and replaying a
-  recording gives the same output every time.
+  scan stamps, so it no longer varies with machine load. A replay of a
+  recording gives the same stamps every time. A match that needs the recovery
+  search can still give a different pose on each replay.
 * The scan subscription's reliability and depth are exposed as the
   ``scan_qos_reliability`` and ``scan_qos_depth`` parameters. The defaults
   mirror ROS 1, so a ``best_effort`` sensor driver needs
@@ -129,8 +153,8 @@ Inherited from fsm_lidar_odometry, unreleased
   search, now the default, and the ``windowed`` search the algorithm shipped
   with. Over 13908 matches at ``size_scan: 360``, ``angular`` completes a match
   in 17.9 ms against ``windowed``'s 25.4 ms, median.
-* Adds the ``rng_seed`` parameter. A non-zero value pins the recovery search so
-  a run can be reproduced.
+* Adds the ``rng_seed`` parameter, which seeds the recovery search. It does not
+  make a run repeat, as the entry on ``rng_seed`` above says.
 * Parameters outside their permitted range are refused at start-up with an
   explanation instead of tripping an assertion that release builds compile
   away.
