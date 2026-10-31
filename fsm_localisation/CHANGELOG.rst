@@ -4,6 +4,15 @@ Changelog for package fsm_localisation
 
 Forthcoming
 -----------
+* Unpacks the spectrum of an odd count of rays correctly. It unpacked each
+  spectrum as if its length was even. Thus at an odd length it removed the
+  imaginary part of the highest coefficient and gave one coefficient too few.
+  This changed each rotation that the matcher found for such a scan. In the
+  test room the start was 0.14 m and 4.6 degrees out. From there a scan of 269
+  rays now comes to 0.067 degrees and 0.35 cm from the truth. Before, it came
+  to 0.23 degrees and 1.1 cm. A scan laid out as the 1073 rays of the rb1
+  recording now comes to 0.012 degrees, where it came to 0.39 degrees. At an
+  odd length the arithmetic no longer agrees with the ROS 1 package.
 * Lays the map out from the first ray of the scan. The matcher cast its window
   of a turn from the start of that window. Thus it matched a scan whose first
   ray was at a different angle up to half a ray out. In the test room, the
