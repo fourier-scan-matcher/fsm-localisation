@@ -4,6 +4,20 @@ Changelog for package fsm_localisation
 
 Forthcoming
 -----------
+* Lays the map out from the first ray of the scan. The matcher cast its window
+  of a turn from the start of that window. Thus it matched a scan whose first
+  ray was at a different angle up to half a ray out. In the test room, the
+  heading of a whole turn symmetric about the heading was 0.5 degrees out. On
+  a narrower scan where the turn less its rays is odd, as on the rb1
+  recording, the finer casts of the rotation step were half a ray out. Now
+  each cast lies along the rays of the scan, at each count of rays. In the
+  test room the error is less than 4e-15 radians, and on the rb1 layout less
+  than 2e-7.
+* ``Corrector::correct`` takes a fifth argument, ``first_ray_angle``. It is
+  the angle of the first range from the heading of the sensor, and a caller
+  must supply it. The node supplies the ``angle_min`` of the scan.
+  ``FSM::Reference`` increases from 32 to 40 bytes.
+* Refuses a scan whose ``angle_min`` is not a number.
 * Refuses an estimate stamped before zero with a sentence and keeps running.
   The conversion of such a stamp to a time threw an exception that nothing
   caught, and the node aborted at the first such estimate.

@@ -145,7 +145,8 @@ Corrector::Corrector(const Parameters& parameters,
 
 std::expected<CorrectionResult, CorrectionError>
 Corrector::correct(std::span<const double> ranges, const Pose& estimate,
-  const double range_max, const double aperture) const
+  const double range_max, const double aperture,
+  const double first_ray_angle) const
 {
   if (!(aperture > 0.0) || aperture > 2.0 * M_PI + 1e-9)
     return std::unexpected(CorrectionError::aperture_not_a_sensor);
@@ -177,7 +178,7 @@ Corrector::correct(std::span<const double> ranges, const Pose& estimate,
   }
 
   const FSM::MatchOutput match = FSM::Match::fmt(*scan, estimate,
-    FSM::Reference(*map_, range_max, aperture),
+    FSM::Reference(*map_, range_max, aperture, first_ray_angle),
     FSM::DFTUtils::forwardPlan(match_size),
     FSM::DFTUtils::inversePlan(match_size), input_parameters);
 

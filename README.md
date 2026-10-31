@@ -288,7 +288,7 @@ Two frames that exist only to carry this node's answer, so that no frame in an e
 Every refusal is returned as a sentence. Before it matches, the node refuses a correction for these reasons:
 
 - the node holds no map, or no scan, yet
-- the scan spans more than a whole turn, or is not centred on the sensor's heading
+- the scan spans more than a whole turn, or is not centred on the sensor's heading, or its first angle is not a number
 - the estimate names a frame other than the map's
 - the estimate's position is not finite, or its orientation carries no heading
 - the estimate is stamped before zero

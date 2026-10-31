@@ -198,11 +198,16 @@ class Reference
    * angular spacing and keeping the middle of it, which is what such a sensor
    * at that pose would have seen. Casting the sensor's own ray count over a
    * whole turn instead would spread the rays out and match a scan against a
-   * reference of a different shape entirely.
+   * reference of a different shape entirely. `first_ray_angle` is the angle
+   * of the scan's first ray from the heading, in radians, and a window cast at
+   * any count of rays is turned so that its first ray lies along it. Left at
+   * minus pi, a whole turn is cast as it always was.
    */
   Reference(const GridReference& grid, const double max_range,
-    const double aperture = 2.0 * M_PI) noexcept
-  : grid_(&grid), max_range_(max_range), aperture_(aperture)
+    const double aperture = 2.0 * M_PI,
+    const double first_ray_angle = -M_PI) noexcept
+  : grid_(&grid), max_range_(max_range), aperture_(aperture),
+    first_ray_angle_(first_ray_angle)
   {
   }
 
@@ -210,6 +215,12 @@ class Reference
   {
     assert(grid_ != nullptr);
     return aperture_;
+  }
+
+  double firstRayAngle() const noexcept
+  {
+    assert(grid_ != nullptr);
+    return first_ray_angle_;
   }
 
   const GridReference& grid() const noexcept
@@ -246,6 +257,7 @@ class Reference
   const GridReference* grid_ = nullptr;
   double max_range_ = 0.0;
   double aperture_ = 2.0 * M_PI;
+  double first_ray_angle_ = -M_PI;
 };
 
 struct input_params
@@ -366,6 +378,21 @@ inline std::size_t windowPrefixOf(const std::size_t panoramic,
     std::floor((panoramic - rays) / 2.0 + 0.5));
 }
 
+/**
+ * @brief The angle from the heading, in radians, along which the first ray of
+ * the window kept for a sensor of `rays` rays over `aperture` is cast.
+ * @details Half a turn behind the heading, moved on by the rays the window
+ * drops at the near end. Where the turn less the sensor's rays is odd, that
+ * puts the window's first ray half a ray past minus half the aperture.
+ */
+inline double windowStartOf(const std::size_t rays, const double aperture)
+{
+  const std::size_t panoramic = panoramicRaysOf(rays, aperture);
+
+  return -M_PI + static_cast<double>(windowPrefixOf(panoramic, rays))
+    * 2.0 * M_PI / static_cast<double>(panoramic);
+}
+
 class X
 {
   public:
@@ -378,7 +405,7 @@ class X
   {
     if (reference.isGrid())
       return findGrid(pose, reference.grid(), num_rays, reference.maxRange(),
-        reference.aperture());
+        reference.aperture(), reference.firstRayAngle());
 
     const std::vector< std::pair<double, double> >& lines = reference.ring();
 
@@ -800,21 +827,29 @@ class X
    * always was. Where it does not, the alternative is to spread `num_rays`
    * evenly over a whole turn, which compares a measurement against a reference
    * of a different shape and converges confidently on the wrong answer.
+   * @remark The cast is laid out from the scan's own first ray: it is turned
+   * so that its first ray lies along `first_ray_angle`, whatever `num_rays`
+   * is. Ray `i` of the answer lies along ray `i` of the scan, and in a cast of
+   * `k` times the scan's rays ray `k * i` does.
    */
   static std::vector< std::pair<double,double> > findGrid(
     const Pose& pose,
     const GridReference& grid,
     const unsigned int& num_rays,
     const double max_range,
-    const double aperture)
+    const double aperture,
+    const double first_ray_angle)
   {
+    const Pose laid_out{pose.x, pose.y,
+      pose.t + first_ray_angle - windowStartOf(num_rays, aperture)};
+
     const unsigned int panoramic = static_cast<unsigned int>(
       panoramicRaysOf(num_rays, aperture));
 
     const std::size_t prefix = windowPrefixOf(panoramic, num_rays);
 
     const std::vector<double> scan_ranges =
-      grid.ranges(pose, panoramic, max_range);
+      grid.ranges(laid_out, panoramic, max_range);
 
     std::vector< std::pair<double,double> > intersections(num_rays);
 
@@ -822,7 +857,7 @@ class X
     {
       const std::size_t j = prefix + i;
 
-      double t_ray = j * 2*M_PI / panoramic + pose.t - M_PI;
+      double t_ray = j * 2*M_PI / panoramic + laid_out.t - M_PI;
       t_ray = fmod(t_ray + 5*M_PI, 2*M_PI) - M_PI;
 
       intersections[i] = std::make_pair(

@@ -30,12 +30,14 @@
  * would perturb that with nothing here to say so first. This file is that
  * something.
  *
- * It has done its job once. The handle grew a fourth member, the aperture the
- * grid is to be read through, and this file is what said so. The bound below
- * moved from three members to four deliberately, and the golden fixtures were
- * run afterwards to confirm the arithmetic path did not move with it. The
- * bound is not to be raised again to make a change fit. It is there to make
- * growth a decision.
+ * It has done its job twice. The handle grew a fourth member, the aperture the
+ * grid is to be read through, and then a fifth, the turn that lays the window
+ * out from the scan's first ray, and this file is what said so each time. The
+ * bound below moved from three members to four, 24 to 32 bytes, and from four
+ * to five, 32 to 40 bytes, deliberately, and the golden fixtures were run
+ * afterwards to confirm the arithmetic path did not move with it. The bound is
+ * not to be raised again to make a change fit. It is there to make growth a
+ * decision.
  */
 
 #include <gtest/gtest.h>
@@ -74,7 +76,7 @@ TEST(ReferenceHandle, IsTriviallyCopyable)
 
 TEST(ReferenceHandle, IsSmallEnoughToPassCheaplyByValue)
 {
-  EXPECT_LE(sizeof(FSM::Reference), 32U);
+  EXPECT_LE(sizeof(FSM::Reference), 40U);
 }
 
 TEST(ReferenceHandle, EveryOperationIsNoexcept)

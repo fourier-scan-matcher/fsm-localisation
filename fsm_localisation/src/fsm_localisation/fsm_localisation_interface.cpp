@@ -204,9 +204,9 @@ double apertureOf(const sensor_msgs::msg::LaserScan& scan)
  * @details A scan spanning less than a whole turn is accepted and the map is
  * read through the window that sensor could have seen. A scan spanning more
  * than a turn is refused, because a ray of it would be read twice. A scan whose
- * first ray does not sit half its own span behind the heading is refused too:
- * it is a legal scan of another convention and answering it would give a
- * confident pose rotated by whatever the two conventions differ by.
+ * first ray does not sit within a ray of half its own span behind the heading
+ * is refused too, as a scan of another convention, and so is one whose first
+ * angle is not a number.
  * @return an empty string when the angles can be read, otherwise a sentence
  * naming the field and the value it carried.
  */
@@ -234,11 +234,12 @@ std::string anglesProblemOf(const sensor_msgs::msg::LaserScan& scan)
 
   const double expected_min = -0.5 * aperture;
 
-  if (std::abs(FSM::Utils::wrapAngle(scan.angle_min - expected_min)) > slack)
+  if (!std::isfinite(scan.angle_min) ||
+    std::abs(FSM::Utils::wrapAngle(scan.angle_min - expected_min)) > slack)
   {
     return std::format("the scan carries angle_min {}, where a scan spanning "
-      "{} radians is read as centred on the sensor's heading and therefore as "
-      "beginning at {}", scan.angle_min, aperture, expected_min);
+      "{} radians has to be centred on the sensor's heading and so begin "
+      "within a ray of {}", scan.angle_min, aperture, expected_min);
   }
 
   return {};
@@ -494,7 +495,7 @@ std::string Interface::correctFrom(
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
     corrector->correct(upright.ranges, estimated_sensor, scan->range_max,
-      apertureOf(*scan));
+      apertureOf(*scan), scan->angle_min);
 
   if (!corrected.has_value())
     return sentenceOf(corrected.error());

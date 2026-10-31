@@ -103,6 +103,7 @@ OVERLAY_TOLERANCE = 0.7 * RESOLUTION
 
 PILLAR = (4.80, 1.10, 5.20, 1.50)
 PUSH = (0.10, -0.08, 0.12)
+SYMMETRIC_HEADING_BOUND = math.radians(0.25)
 
 SYMMETRIC_FIRST_ANGLE = -math.pi + math.pi / SCAN_SIZE
 
@@ -404,14 +405,12 @@ class TestUpsideDownSensor(unittest.TestCase):
         heading away here, where the sum is nought.
 
         The bound is the second case's. Measured on this fixture: the two
-        answers stand 5.8e-8 m apart at the same heading. A node pairing ray i
+        answers stand 6.8e-8 m apart at the same heading. A node pairing ray i
         with ray size - i, and one turning the reversed scan by one ray
         whatever the scan, both answer 0.0036 m and 1.000 degree from the
-        upright one here, and pass the second case. The layout alone turns the
-        upright answer by 0.375 degrees, from 0.125 to 0.500 degrees off where
-        the robot stands: the node lays a whole turn out from minus pi
-        whatever its first angle, and this scan begins half a ray later. So
-        the pair is held to each other and not to the truth.
+        upright one here, and pass the second case. Those two were measured
+        before the matcher laid the map out from the scan's first ray. The
+        pair is held to each other here and to the truth in the case below.
         """
         self.assert_put_where_the_upright_one_is(
             'upright, symmetric', 'upside down, symmetric',
@@ -470,3 +469,32 @@ class TestUpsideDownSensor(unittest.TestCase):
             'the map scan for "upside down, narrow" disagrees with the one for '
             '"upright, narrow" reversed by %.6f m a ray on average, against a '
             'bound of %.6f m' % (disagreement, MIRROR_TOLERANCE))
+
+    def test_7_a_scan_symmetric_about_nought_is_put_where_the_robot_stands(
+            self):
+        """
+        Hold the upright answer on a scan symmetric about nought to the truth.
+
+        The answer may not depend on where the scan's first ray sits. This
+        scan begins half a ray after the one of the first case, and the
+        matcher has to read it as that.
+
+        Measured on this fixture, from where the robot stands: 0.500 degrees
+        of heading on this scan before the repair and 0.0005 degrees after,
+        against 0.125 degrees on the scan beginning at minus pi before it. The
+        bound is a quarter of a degree, between the two.
+        """
+        found = self.answer('upright, symmetric')
+
+        heading_difference = abs(wrap(found[2] - TRUE_ROBOT_POSE[2]))
+
+        message = (
+            'on the scan symmetric about nought a laser mounted upright put '
+            'the robot at (%.4f, %.4f, %.4f) where it stands at (%.4f, %.4f, '
+            '%.4f), %.3f degrees of heading away. The bound is %.3f degrees'
+            % (found + TRUE_ROBOT_POSE
+               + (math.degrees(heading_difference),
+                  math.degrees(SYMMETRIC_HEADING_BOUND))))
+
+        self.assertLessEqual(heading_difference, SYMMETRIC_HEADING_BOUND,
+                             message)

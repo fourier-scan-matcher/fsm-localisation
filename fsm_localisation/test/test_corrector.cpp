@@ -49,6 +49,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -56,6 +57,7 @@
 #include <memory>
 #include <numeric>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "fsm_localisation/fsm_localisation.hpp"
@@ -81,9 +83,21 @@ const unsigned int kHeight = 91U;
 const double kResolution = 0.05;
 
 const double kRangeMax = 12.0;
+const double kSymmetricHeadingBound = 0.004;
+const double kFirstRayAtMinusPi = -M_PI;
 const double kFullTurn = 2.0 * M_PI;
 
 const unsigned int kNumRays = 360U;
+
+const double kRayAngleBound = 1e-6;
+
+const std::vector<std::size_t> kMagnifications = {1U, 2U, 4U, 8U};
+
+const unsigned int kNarrowRays = 271U;
+
+const unsigned int kRb1Rays = 1073U;
+const double kRb1AngleMin = -2.3387413;
+const double kRb1AngleMax = 2.3387413;
 
 const Pose kTruth{1.53, 1.07, 0.4};
 
@@ -252,13 +266,126 @@ TEST(Corrector, ASensorCoveringThreeQuartersOfATurnIsPutBack)
   const Pose estimate{kTruth.x + 0.11, kTruth.y - 0.09, kTruth.t + 0.08};
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, estimate, kRangeMax, aperture);
+    corrector.correct(scan, estimate, kRangeMax, aperture, -0.5 * aperture);
 
   ASSERT_TRUE(corrected.has_value());
 
   EXPECT_NEAR(corrected->corrected.x, kTruth.x, kResolution);
   EXPECT_NEAR(corrected->corrected.y, kTruth.y, kResolution);
   EXPECT_NEAR(corrected->corrected.t, kTruth.t, headingBound(scan));
+}
+
+/**
+ * @brief A whole turn beginning half a ray after minus pi is put back as well
+ * as one beginning at minus pi.
+ * @details The scan is what a sensor symmetric about its heading reports, so
+ * its first ray lies half a ray past where the matcher lays a whole turn out
+ * from. Told where the first ray sits, the answer must not depend on it. Told
+ * it sits at minus pi, it comes out turned. Measured, the answer is 0.0007
+ * radians from the truth when told and 0.0080 when not. The bound is between
+ * the two.
+ */
+TEST(Corrector, AScanSymmetricAboutTheHeadingIsPutBack)
+{
+  const std::shared_ptr<const OccupancyGridMap> map = mapOf(roomMessage());
+  ASSERT_NE(map, nullptr);
+
+  const double half_a_ray = M_PI / kNumRays;
+
+  const std::vector<double> scan = map->ranges(
+    Pose{kTruth.x, kTruth.y, kTruth.t + half_a_ray}, kNumRays, kRangeMax);
+
+  const Corrector corrector(defaultParameters(), map);
+
+  const Pose estimate{kTruth.x + 0.11, kTruth.y - 0.09, kTruth.t + 0.08};
+
+  const std::expected<CorrectionResult, CorrectionError> corrected =
+    corrector.correct(scan, estimate, kRangeMax, kFullTurn,
+      kFirstRayAtMinusPi + half_a_ray);
+
+  ASSERT_TRUE(corrected.has_value());
+
+  EXPECT_NEAR(corrected->corrected.x, kTruth.x, kResolution);
+  EXPECT_NEAR(corrected->corrected.y, kTruth.y, kResolution);
+  EXPECT_NEAR(corrected->corrected.t, kTruth.t, kSymmetricHeadingBound);
+}
+
+/**
+ * @brief Every ray of the map's scan lies along the ray of the scan it is
+ * matched against, wherever that scan's first ray sits.
+ * @details The reference is told the angle of the scan's first ray and cast
+ * at the scan's own count of rays and at 2, 4 and 8 times it, as the rotation
+ * step casts it, and ray `k * i` of a cast of `k` times the rays has to lie
+ * along ray `i` of the scan. Each layout is one a sensor reports: a
+ * whole turn from minus pi, a whole turn symmetric about the heading, three
+ * quarters of a turn, 271 rays symmetric about the heading, where the turn
+ * less the rays is odd, and the 1073 rays of the rb1 recording, where it is
+ * odd too. A point on each ray gives the ray's angle exactly, whatever the
+ * range. Measured, at every count of rays the worst ray is 3.6e-15 radians
+ * out on every layout but rb1's and 2.0e-7 on rb1's, whose recorded spacing
+ * exceeds a turn's 1440th by 1.9e-10 radians, 2.0e-7 over its 1072 steps.
+ * Turned for the scan's own count alone, the casts at 2, 4 and 8 times the
+ * rays of the 271 and 1073 ray layouts are half a ray out, 0.0087 and 0.0022
+ * radians. Not turned at all, the whole turn symmetric about the heading is
+ * 0.0087 out at every count and the other two as before. The bound is
+ * between the two.
+ */
+TEST(Corrector, EveryRayOfTheMapScanLiesAlongTheRayOfTheScan)
+{
+  const std::shared_ptr<const OccupancyGridMap> map = mapOf(roomMessage());
+  ASSERT_NE(map, nullptr);
+
+  struct Layout
+  {
+    std::size_t rays;
+    double spacing;
+    double first_ray_angle;
+  };
+
+  const double turn_spacing = kFullTurn / kNumRays;
+  const double rb1_spacing = (kRb1AngleMax - kRb1AngleMin) / (kRb1Rays - 1);
+
+  const std::vector<Layout> layouts = {
+    {kNumRays, turn_spacing, kFirstRayAtMinusPi},
+    {kNumRays, turn_spacing, kFirstRayAtMinusPi + 0.5 * turn_spacing},
+    {3 * kNumRays / 4, turn_spacing, -0.375 * kFullTurn},
+    {kNarrowRays, turn_spacing, -0.5 * (kNarrowRays - 1) * turn_spacing},
+    {kRb1Rays, rb1_spacing, kRb1AngleMin},
+  };
+
+  for (const Layout& layout : layouts)
+  {
+    const double aperture = layout.rays * layout.spacing;
+
+    const FSM::Reference reference(*map, kRangeMax, aperture,
+      layout.first_ray_angle);
+
+    for (const std::size_t magnification : kMagnifications)
+    {
+      const std::size_t rays = magnification * layout.rays;
+      const double spacing = layout.spacing / magnification;
+
+      const std::vector<std::pair<double, double>> points = FSM::X::find(
+        kTruth, reference, static_cast<unsigned int>(rays),
+        FSM::RaySearch::angular);
+
+      ASSERT_EQ(points.size(), rays);
+
+      double worst = 0.0;
+      for (std::size_t i = 0; i < points.size(); ++i)
+      {
+        const double along = std::atan2(points[i].second - kTruth.y,
+          points[i].first - kTruth.x);
+        const double expected = kTruth.t + layout.first_ray_angle + i * spacing;
+
+        worst = std::max(worst,
+          std::abs(std::remainder(along - expected, kFullTurn)));
+      }
+
+      EXPECT_LE(worst, kRayAngleBound) << rays << " rays from "
+        << layout.first_ray_angle << " radians";
+    }
+  }
 }
 
 /**
@@ -276,7 +403,7 @@ TEST(Corrector, AnApertureNoSensorCanCoverIsRefused)
   for (const double aperture : {0.0, -1.0, 4.0 * M_PI})
   {
     const std::expected<CorrectionResult, CorrectionError> corrected =
-      corrector.correct(scan, kTruth, kRangeMax, aperture);
+      corrector.correct(scan, kTruth, kRangeMax, aperture, -0.5 * aperture);
 
     ASSERT_FALSE(corrected.has_value()) << "aperture " << aperture;
     EXPECT_EQ(corrected.error(), CorrectionError::aperture_not_a_sensor)
@@ -317,7 +444,7 @@ TEST(Corrector, AnEstimateDisplacedInPositionIsPutBack)
   const Pose estimate{kTruth.x + 0.11, kTruth.y - 0.09, kTruth.t};
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, estimate, kRangeMax, kFullTurn);
+    corrector.correct(scan, estimate, kRangeMax, kFullTurn, kFirstRayAtMinusPi);
 
   ASSERT_TRUE(corrected.has_value());
 
@@ -338,7 +465,7 @@ TEST(Corrector, AnEstimateDisplacedInHeadingIsPutBack)
   const Pose estimate{kTruth.x, kTruth.y, kTruth.t + 0.12};
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, estimate, kRangeMax, kFullTurn);
+    corrector.correct(scan, estimate, kRangeMax, kFullTurn, kFirstRayAtMinusPi);
 
   ASSERT_TRUE(corrected.has_value());
 
@@ -359,7 +486,7 @@ TEST(Corrector, AnEstimateDisplacedInBothIsPutBack)
   const Pose estimate{kTruth.x + 0.11, kTruth.y - 0.09, kTruth.t + 0.12};
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, estimate, kRangeMax, kFullTurn);
+    corrector.correct(scan, estimate, kRangeMax, kFullTurn, kFirstRayAtMinusPi);
 
   ASSERT_TRUE(corrected.has_value());
 
@@ -380,9 +507,9 @@ TEST(Corrector, TheSameCorrectionTwiceGivesTheSameAnswerExactly)
   const Pose estimate{kTruth.x + 0.11, kTruth.y - 0.09, kTruth.t + 0.12};
 
   const std::expected<CorrectionResult, CorrectionError> first =
-    corrector.correct(scan, estimate, kRangeMax, kFullTurn);
+    corrector.correct(scan, estimate, kRangeMax, kFullTurn, kFirstRayAtMinusPi);
   const std::expected<CorrectionResult, CorrectionError> second =
-    corrector.correct(scan, estimate, kRangeMax, kFullTurn);
+    corrector.correct(scan, estimate, kRangeMax, kFullTurn, kFirstRayAtMinusPi);
 
   ASSERT_TRUE(first.has_value());
   ASSERT_TRUE(second.has_value());
@@ -405,16 +532,17 @@ TEST(Corrector, ACorrectionIsNotAffectedByTheOneBeforeIt)
   const Pose estimate{kTruth.x + 0.11, kTruth.y - 0.09, kTruth.t};
 
   const std::expected<CorrectionResult, CorrectionError> alone =
-    corrector.correct(scan, estimate, kRangeMax, kFullTurn);
+    corrector.correct(scan, estimate, kRangeMax, kFullTurn, kFirstRayAtMinusPi);
 
   const Corrector second_corrector(defaultParameters(), map);
 
   ASSERT_TRUE(second_corrector.correct(
       scan, Pose{kTruth.x - 0.13, kTruth.y + 0.07, kTruth.t + 0.2},
-      kRangeMax, kFullTurn).has_value());
+      kRangeMax, kFullTurn, kFirstRayAtMinusPi).has_value());
 
   const std::expected<CorrectionResult, CorrectionError> after =
-    second_corrector.correct(scan, estimate, kRangeMax, kFullTurn);
+    second_corrector.correct(scan, estimate, kRangeMax, kFullTurn,
+      kFirstRayAtMinusPi);
 
   ASSERT_TRUE(alone.has_value());
   ASSERT_TRUE(after.has_value());
@@ -437,7 +565,7 @@ TEST(Corrector, AScanShorterThanTheConfiguredSizeIsRefused)
   const std::vector<double> scan(179U, 1.0);
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, kTruth, kRangeMax, kFullTurn);
+    corrector.correct(scan, kTruth, kRangeMax, kFullTurn, kFirstRayAtMinusPi);
 
   ASSERT_FALSE(corrected.has_value());
   EXPECT_EQ(corrected.error(), CorrectionError::scan_too_short);
@@ -459,7 +587,7 @@ TEST(Corrector, AScanWithNoUsableRangeIsRefused)
     scan[i] = std::numeric_limits<double>::quiet_NaN();
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, kTruth, kRangeMax, kFullTurn);
+    corrector.correct(scan, kTruth, kRangeMax, kFullTurn, kFirstRayAtMinusPi);
 
   ASSERT_FALSE(corrected.has_value());
   EXPECT_EQ(corrected.error(), CorrectionError::scan_entirely_invalid);
@@ -477,7 +605,7 @@ TEST(Corrector, AnEstimateOutsideTheMapIsRefused)
   const Pose outside{-5.0, -5.0, 0.0};
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, outside, kRangeMax, kFullTurn);
+    corrector.correct(scan, outside, kRangeMax, kFullTurn, kFirstRayAtMinusPi);
 
   ASSERT_FALSE(corrected.has_value());
   EXPECT_EQ(corrected.error(), CorrectionError::estimate_not_in_free_space);
@@ -497,7 +625,8 @@ TEST(Corrector, AnEstimateStandingInAWallIsRefused)
   ASSERT_FALSE(map->isFree(in_the_pillar.x, in_the_pillar.y));
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, in_the_pillar, kRangeMax, kFullTurn);
+    corrector.correct(scan, in_the_pillar, kRangeMax, kFullTurn,
+      kFirstRayAtMinusPi);
 
   ASSERT_FALSE(corrected.has_value());
   EXPECT_EQ(corrected.error(), CorrectionError::estimate_not_in_free_space);
@@ -515,7 +644,7 @@ TEST(Corrector, AnEstimateSeeingNothingOnTheMapIsRefused)
   ASSERT_TRUE(map->isFree(kTruth.x, kTruth.y));
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, kTruth, kRangeMax, kFullTurn);
+    corrector.correct(scan, kTruth, kRangeMax, kFullTurn, kFirstRayAtMinusPi);
 
   ASSERT_FALSE(corrected.has_value());
   EXPECT_EQ(corrected.error(),
@@ -537,7 +666,7 @@ TEST(Corrector, AMatchThatSpendsEveryRecoveryIsRefused)
   const std::vector<double> scan(90U, 2.0);
 
   const std::expected<CorrectionResult, CorrectionError> corrected =
-    corrector.correct(scan, estimate, kRangeMax, kFullTurn);
+    corrector.correct(scan, estimate, kRangeMax, kFullTurn, kFirstRayAtMinusPi);
 
   ASSERT_FALSE(corrected.has_value());
   EXPECT_EQ(corrected.error(), CorrectionError::recovery_budget_exhausted);

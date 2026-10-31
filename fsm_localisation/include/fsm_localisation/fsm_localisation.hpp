@@ -202,7 +202,10 @@ public:
    * correction rather than held.
    * @param aperture what the sensor covers, in radians. A sensor that sees all
    * the way round passes a whole turn.
-   * @remark This parameter carries no default, deliberately. A default of a
+   * @param first_ray_angle the angle of the first of `ranges` from the
+   * sensor's heading, in radians, which is a laser scan's `angle_min`. It
+   * stays the angle of the first range where `size_scan` resamples the scan.
+   * @remark The aperture carries no default, deliberately. A default of a
    * whole turn would let a caller with a narrower sensor say nothing and be
    * answered confidently and wrongly, the map being read over a whole turn and
    * matched against a measurement covering less of one. That failure has
@@ -213,7 +216,8 @@ public:
     std::span<const double> ranges,
     const Pose& estimate,
     double range_max,
-    double aperture) const;
+    double aperture,
+    double first_ray_angle) const;
 
   const Parameters& parameters() const { return parameters_; }
 
