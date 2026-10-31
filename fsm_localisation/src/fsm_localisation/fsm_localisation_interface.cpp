@@ -678,13 +678,18 @@ void Interface::publishCorrectionTransforms(
 }
 
 /**
- * @details For a sensor mounted upside down `corrected_sensor` is the upright
- * sensor its scan was handed over as, whose ray `n - 1 - k` points where the
- * mounted sensor's ray `k` does. The cast is taken from that upright sensor
- * and published in reverse order. Where the scan is a whole turn beginning at
- * minus pi, cast ray `k` lies along that upright sensor's ray `k`, so
- * published ray `k` lies along the mounted sensor's ray `k` and not along its
- * mirror image.
+ * @details Ray `k` of the cast is cast on its own, along the direction the
+ * sensor's ray `k` points in, so the cast carries the scan's own first angle,
+ * spacing and ray count and lies over the scan ray for ray whatever the
+ * sensor covers. One cast of the scan's ray count spread over a whole turn
+ * would lie over the scan only where the scan is a whole turn beginning half
+ * a turn behind the heading.
+ * For a sensor mounted upside down `corrected_sensor` is the upright sensor
+ * its scan was handed over as, whose ray `n - 1 - k` points where the mounted
+ * sensor's ray `k` does, so ray `k` is cast along that upright sensor's ray
+ * `n - 1 - k`.
+ * The map casts a single ray half a turn behind the pose it is given, so each
+ * ray is cast from a pose turned half a turn past the ray's own direction.
  */
 void Interface::publishMapScan(const sensor_msgs::msg::LaserScan& real_scan,
   const Pose& corrected_sensor, const bool upside_down,
@@ -700,8 +705,7 @@ void Interface::publishMapScan(const sensor_msgs::msg::LaserScan& real_scan,
   if (!map)
     return;
 
-  const std::vector<double> ranges = map->ranges(corrected_sensor,
-    static_cast<unsigned int>(real_scan.ranges.size()), real_scan.range_max);
+  const std::size_t rays = real_scan.ranges.size();
 
   sensor_msgs::msg::LaserScan message;
   message.header.stamp = stamp;
@@ -711,11 +715,18 @@ void Interface::publishMapScan(const sensor_msgs::msg::LaserScan& real_scan,
   message.angle_increment = real_scan.angle_increment;
   message.range_min = real_scan.range_min;
   message.range_max = real_scan.range_max;
+  message.ranges.reserve(rays);
 
-  if (upside_down)
-    message.ranges.assign(ranges.rbegin(), ranges.rend());
-  else
-    message.ranges.assign(ranges.begin(), ranges.end());
+  for (std::size_t ray = 0; ray < rays; ++ray)
+  {
+    const std::size_t upright_ray = upside_down ? rays - 1 - ray : ray;
+    const double heading = corrected_sensor.t + real_scan.angle_min
+      + static_cast<double>(upright_ray) * real_scan.angle_increment;
+
+    message.ranges.push_back(static_cast<float>(map->ranges(
+      Pose{corrected_sensor.x, corrected_sensor.y, heading + M_PI}, 1U,
+      real_scan.range_max).front()));
+  }
 
   map_scan_publisher_->publish(message);
 }

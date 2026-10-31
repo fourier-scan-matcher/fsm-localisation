@@ -291,16 +291,22 @@ class AmeliorationHarness(Node):
 
     def publish_scan(self, stamp, sensor_pose=None, size=SCAN_SIZE, ranges=None,
                      frame_id=SENSOR_FRAME, first_angle=-math.pi):
-        """Send one scan to the node, seen from where the laser really is."""
+        """
+        Send one scan to the node, seen from where the laser really is.
+
+        Rays lie a turn divided by size apart, so fewer ranges than size are
+        a laser that sees less than a turn.
+        """
         if sensor_pose is None:
             sensor_pose = true_sensor_pose()
+
+        increment = 2.0 * math.pi / size
 
         scan = LaserScan()
         scan.header.stamp.sec, scan.header.stamp.nanosec = stamp
         scan.header.frame_id = frame_id
         scan.angle_min = first_angle
-        scan.angle_max = first_angle + 2.0 * math.pi - 2.0 * math.pi / size
-        scan.angle_increment = 2.0 * math.pi / size
+        scan.angle_increment = increment
         scan.time_increment = 0.0
         scan.scan_time = 0.1
         scan.range_min = 0.0
@@ -308,6 +314,7 @@ class AmeliorationHarness(Node):
         scan.ranges = ranges if ranges is not None else room_scan(
             *sensor_pose, width=ROOM_WIDTH, height=ROOM_HEIGHT, size=size,
             first_angle=first_angle)
+        scan.angle_max = first_angle + (len(scan.ranges) - 1) * increment
         scan.intensities = []
         self.scan_publisher.publish(scan)
         return scan
