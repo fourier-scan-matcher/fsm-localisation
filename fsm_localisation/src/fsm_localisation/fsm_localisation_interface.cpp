@@ -451,6 +451,9 @@ std::string Interface::correctFrom(
       "be finite and must have a length to be normalised by";
   }
 
+  if (estimate.header.stamp.sec < 0)
+    return "the estimate is stamped before zero, which a ROS time cannot hold";
+
   const Pose estimated_base{
     estimate.pose.pose.position.x,
     estimate.pose.pose.position.y,

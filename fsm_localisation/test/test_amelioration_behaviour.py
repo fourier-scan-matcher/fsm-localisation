@@ -67,6 +67,7 @@ SECOND = (1700000000, 200000000)
 THIRD = (1700000000, 400000000)
 FOURTH = (1700000000, 600000000)
 FIFTH = (1700000000, 800000000)
+BEFORE_ZERO = (-1, 0)
 
 
 @pytest.mark.launch_test
@@ -266,6 +267,35 @@ class TestAmeliorationBehaviour(unittest.TestCase):
         response = self.harness.call('correct_once')
         self.assertFalse(response.success)
         self.assertIn('odom', response.message)
+
+    def test_an_estimate_stamped_before_zero_is_refused_and_the_next_served(
+            self):
+        """
+        Refuse an estimate stamped before zero and correct the one after it.
+
+        A ROS time holds no time before zero, and building one throws. A throw
+        that escaped the correction would stop the node, so the case asks it
+        for the estimate after that one as well.
+        """
+        self.harness.call('start')
+        self.harness.publish_scan(FIRST)
+        self.harness.spin(0.5)
+        self.harness.clear()
+        self.harness.publish_estimate(BEFORE_ZERO,
+                                      displaced((0.10, -0.08, 0.0)))
+        self.harness.spin(2.0)
+
+        self.assertEqual(self.harness.corrected, [])
+
+        response = self.harness.call('correct_once')
+        self.assertFalse(response.success)
+        self.assertIn('before zero', response.message)
+
+        self.harness.publish_estimate(SECOND, displaced((0.10, -0.08, 0.05)))
+        self.harness.spin(3.0)
+
+        self.assert_recovered(self.harness.corrected,
+                              room_scan(*true_sensor_pose()))
 
     def test_a_scan_with_no_usable_range_is_refused(self):
         self.harness.call('start')
