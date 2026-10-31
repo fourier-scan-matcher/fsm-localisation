@@ -21,6 +21,7 @@
 #ifndef FSM_LOCALISATION__FSM_LOCALISATION_INTERFACE_HPP_
 #define FSM_LOCALISATION__FSM_LOCALISATION_INTERFACE_HPP_
 
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -168,7 +169,8 @@ private:
   std::string global_frame_id_;
   std::string base_frame_id_;
 
-  bool locked_{true};
+  /** @brief Start and stop write it and callbacks read it on other threads. */
+  std::atomic<bool> locked_{true};
 
   std::unique_ptr<Matcher> matcher_;
 
