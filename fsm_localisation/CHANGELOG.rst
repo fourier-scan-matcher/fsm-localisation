@@ -4,6 +4,12 @@ Changelog for package fsm_localisation
 
 Forthcoming
 -----------
+* Declares ``libfftw3-dev`` as a build dependency and ``libfftw3`` as a run
+  dependency. ``ros/rosdistro`` #54634 split the ``libfftw3`` rule: that key
+  now installs the run time libraries only, and the new key ``libfftw3-dev``
+  installs the headers. Thus ``rosdep`` installs each dependency, and the
+  install steps and ``docker/Dockerfile`` no longer install ``libfftw3-dev``
+  by name or skip a key.
 * Switches the translation bound off in ``params_amelioration.yaml``. On the
   rb1 recording, the estimate was up to 0.25 m and 10 degrees out on every
   third frame. There the bound refused 510 to 670 of 2223 frames. It also let

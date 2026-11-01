@@ -99,12 +99,9 @@ mkdir -p ~/ros2_ws/src
 cd ~/ros2_ws/src
 git clone <this repository>
 cd ~/ros2_ws
-sudo apt install libfftw3-dev
-rosdep install --from-paths src --ignore-src -r -y --skip-keys libfftw3
+rosdep install --from-paths src --ignore-src -r -y
 colcon build --packages-select fsm_localisation
 ```
-
-The two extra pieces are one stale rule and not a missing dependency. FFTW is declared in the manifest like everything else, but the `libfftw3` rule in `ros/rosdistro` resolves to `libfftw3-3`, a package Ubuntu dropped in favour of one per precision. Until that rule carries an override for this release, the key is skipped and the development package, which pulls the runtime it needs, is named directly. `docker/Dockerfile` does the same thing for the same reason.
 
 ### As a dependency of your own package
 
