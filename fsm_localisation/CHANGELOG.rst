@@ -2,6 +2,13 @@
 Changelog for package fsm_localisation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+Forthcoming
+-----------
+* Declares as test dependencies the packages that the Python tests import:
+  ``launch``, ``launch_ros``, ``launch_testing``, ``python3-pytest``,
+  ``rcl_interfaces``, ``rclpy`` and ``tf2_msgs``. Before, the tests got them
+  only through other packages.
+
 1.0.0 (2026-11-01)
 ------------------
 * Declares ``libfftw3-dev`` as a build dependency and ``libfftw3`` as a run
