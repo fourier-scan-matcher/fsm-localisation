@@ -165,10 +165,10 @@
     ray_search: "angular"
 
     # Three behaviours carried across from the scan-to-map matcher this package
-    # borrows from. All three are unconditional in that matcher, so all three
-    # are on here: this mode is that matcher. They are off in the odometry file,
-    # where the matcher never had them and the recorded comparisons assume their
-    # absence.
+    # borrows from. All three are unconditional in that matcher. Two are on
+    # here. The translation bound is off, for the reason given at it. All three
+    # are off in the odometry file, where the matcher never had them and the
+    # recorded comparisons assume their absence.
 
     # Once the rotation criterion passes 0.99999, jump straight to the maximum
     # angular oversampling instead of climbing to it. Fires at most once per
@@ -177,9 +177,14 @@
 
     # The translation stage abandons a candidate whose position has moved more
     # than xy_bound + 0.01 on either axis from where the stage started, and
-    # treats it as a failure. Keeps a correction from wandering off the map, at
-    # the cost of giving up on one that would have come good.
-    enforce_translation_bound: true
+    # treats it as a failure. It is off here. The rb1 recording gives the
+    # reason, every third frame of it. With the estimate up to 0.25 m and 10
+    # degrees out, the bound refused 510 to 670 of 2223 frames. It also let 17
+    # to 57 wrong answers through. Off, it refused none and let 1 to 49 through.
+    # A wrong answer is more than 0.5 m or 10 degrees from the logged pose. With
+    # the estimate 0.5 m or 1.0 m out, the bound refused most frames. It still
+    # let 269 and 636 wrong answers through, against 460 and 1219 off.
+    enforce_translation_bound: false
 
     # When every candidate angle fails its trial translation, start a recovery
     # rather than carry on with the angle of a candidate that failed. Reaches

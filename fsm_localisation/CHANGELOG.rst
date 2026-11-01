@@ -4,6 +4,13 @@ Changelog for package fsm_localisation
 
 Forthcoming
 -----------
+* Switches the translation bound off in ``params_amelioration.yaml``. On the
+  rb1 recording, the estimate was up to 0.25 m and 10 degrees out on every
+  third frame. There the bound refused 510 to 670 of 2223 frames. It also let
+  through 17 to 57 answers more than 0.5 m or 10 degrees out. With the bound
+  off, no frame was refused and 1 to 49 answers were that far out. With the
+  estimate on the logged pose, the median heading gap fell from 0.587 to 0.503
+  degrees.
 * Unpacks the spectrum of an odd count of rays correctly. It unpacked each
   spectrum as if its length was even. Thus at an odd length it removed the
   imaginary part of the highest coefficient and gave one coefficient too few.
