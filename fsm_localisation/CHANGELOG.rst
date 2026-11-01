@@ -2,8 +2,8 @@
 Changelog for package fsm_localisation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.0.0 (2026-11-01)
+------------------
 * Declares ``libfftw3-dev`` as a build dependency and ``libfftw3`` as a run
   dependency. ``ros/rosdistro`` #54634 split the ``libfftw3`` rule: that key
   now installs the run time libraries only, and the new key ``libfftw3-dev``
